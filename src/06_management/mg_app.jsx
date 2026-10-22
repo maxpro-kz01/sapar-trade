@@ -22,9 +22,9 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
   const p = { role, cur, prev, rg, go, warehouse, problems, weights: mgWeights, addAudit, showToast, openTp: (id) => setTpOpen(id) };
   const title = tpOpen ? MG.tpById[tpOpen].name : MG_TABS[tab][1];
   return (
-    <div className="relative h-full flex flex-col" style={{ background: "var(--bg)" }}>
+    <div className="relative h-full flex flex-col kz-app" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="px-5 pb-2 flex items-center gap-2">
+      <div className="px-5 pb-2 flex items-center gap-2 kz-head">
         <div className="rounded-xl flex items-center justify-center shrink-0" style={{ width: 32, height: 32, background: "#fff", border: "1px solid var(--line)" }}><Logo size={24} /></div>
         <div className="flex-1 min-w-0">
           <p className="font-display truncate" style={{ fontSize: 13.5, fontWeight: 800, color: "var(--ink)" }}>{title}</p>
@@ -38,12 +38,12 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
         <button onClick={onExit} className="p-2 rounded-full" style={{ background: "#FCE7E6" }}><Ico name="log-out" size={15} color="var(--red)" /></button>
       </div>
       {stale && (
-        <div className="rounded-xl px-3 py-2 flex items-center gap-2" style={{ background: "#FCE7E6", margin: "0 20px 8px" }}>
+        <div className="rounded-xl px-3 py-2 flex items-center gap-2 kz-stale" style={{ background: "#FCE7E6", margin: "0 20px 8px" }}>
           <Ico name="clock" size={14} color="#B3261E" />
           <span style={{ fontSize: 11, color: "#B3261E", fontWeight: 600, flex: 1 }}>Данные могут быть устаревшими. Последнее обновление: {dt(new Date(mgSync.sd))}</span>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body">
+      <div className="flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main">
         {tpOpen ? (
           <>
             <button onClick={() => setTpOpen(null)} className="flex items-center gap-1 mb-3" style={{ fontSize: 12.5, color: "var(--navy)", fontWeight: 700 }}><Ico name="arrow-left" size={14} />Назад к команде</button>
@@ -67,17 +67,8 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
           </>
         )}
       </div>
-      <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1 px-2 pt-2 overflow-x-auto" style={{ background: "#fff", borderTop: "1px solid var(--line)", scrollbarWidth: "none", paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}>
-        {R.tabs.map((id) => {
-          const active = tab === id && !tpOpen;
-          return (
-            <button key={id} onClick={() => go(id)} className="flex flex-col items-center gap-1 shrink-0 px-2.5 py-1 rounded-xl" style={{ background: active ? "#EEF0FF" : "transparent", minWidth: 54 }}>
-              <Ico name={MG_TABS[id][0]} size={18} color={active ? "var(--navy)" : "var(--muted)"} strokeWidth={active ? 2.4 : 2} />
-              <span style={{ fontSize: 9, color: active ? "var(--navy)" : "var(--muted)", fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{MG_TABS[id][1]}</span>
-            </button>
-          );
-        })}
-      </div>
+      <AppNav items={R.tabs.map((id) => ({ id, icon: MG_TABS[id][0], label: MG_TABS[id][1] }))} active={tpOpen ? null : tab} onPick={go}
+        brand={<NavBrand title="Sapar Trade" sub="Система управления" />} />
       {bell && (
         <Modal title="Уведомления" onClose={() => setBell(false)}>
           {problems.filter((x) => x.lvl !== "green").map((x, i) => <MgProblemRow key={i} p={x} onGo={(t) => { setBell(false); go(t); }} />)}

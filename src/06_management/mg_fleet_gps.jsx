@@ -82,7 +82,7 @@ function useLeaflet() {
   return { L, failed };
 }
 
-function FleetLeafletMap({ L, items, focus, onPick }) {
+function FleetLeafletMap({ L, items, focus, onPick, height = 330 }) {
   const box = useRef(null), map = useRef(null), layer = useRef(null);
   useEffect(() => {
     if (!L || !box.current || map.current) return;
@@ -117,18 +117,19 @@ function FleetLeafletMap({ L, items, focus, onPick }) {
     if (it) map.current.flyTo([it.s.pos.lat, it.s.pos.lng], 15, { duration: 0.6 });
     else map.current.flyTo(KZO_CENTER, 13, { duration: 0.6 });
   }, [focus]);
-  return <div ref={box} style={{ height: 330, width: "100%", borderRadius: 16, overflow: "hidden", position: "relative", zIndex: 0, border: "1px solid var(--line)" }} />;
+  useEffect(() => { if (map.current) setTimeout(() => map.current.invalidateSize(), 50); }, [height]);
+  return <div ref={box} style={{ height, width: "100%", borderRadius: 16, overflow: "hidden", position: "relative", zIndex: 0, border: "1px solid var(--line)" }} />;
 }
 
 // Запасная схема, если карта не загрузилась (нет интернета)
-function FleetSchemeMap({ items, focus, onPick }) {
+function FleetSchemeMap({ items, focus, onPick, height = 230 }) {
   const all = [KZO_WAREHOUSE, ...items.flatMap(({ d }) => d.stops)];
   const la = all.map((p) => p.lat), ln = all.map((p) => p.lng);
   const b = { a: Math.min(...la) - 0.004, z: Math.max(...la) + 0.004, c: Math.min(...ln) - 0.006, d: Math.max(...ln) + 0.006 };
   const X = (p) => 10 + ((p.lng - b.c) / (b.d - b.c)) * 300, Y = (p) => 10 + (1 - (p.lat - b.a) / (b.z - b.a)) * 210;
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "#F3F6FB", border: "1px solid var(--line)" }}>
-      <svg viewBox="0 0 320 230" width="100%" height="230">
+      <svg viewBox="0 0 320 230" width="100%" height={height}>
         {items.map(({ d, s, lost }) => {
           const col = lost ? "#9A97AE" : d.color;
           return (
@@ -148,6 +149,8 @@ function FleetSchemeMap({ items, focus, onPick }) {
 function MgFleet({ role, addAudit }) {
   const R = MG_ROLES[role];
   const { L, failed } = useLeaflet();
+  const desktop = useMedia("(min-width: 1200px)");
+  const mapH = desktop ? 600 : 330;
   const [now, setNow] = useState(Date.now());
   const [fast, setFast] = useState(false);
   const [focus, setFocus] = useState(null);
@@ -177,13 +180,17 @@ function MgFleet({ role, addAudit }) {
         <MgKpi label="Точек пройдено" value={delivered + " / " + totalStops} />
         <MgKpi label="Пробег сегодня" value={Math.round(items.reduce((q, x) => q + x.s.km, 0)) + " км"} />
       </div>
-      {L && !failed ? <FleetLeafletMap L={L} items={items} focus={focus} onPick={setFocus} /> : failed ? <FleetSchemeMap items={items} focus={focus} onPick={setFocus} /> :
-        <div className="rounded-2xl flex items-center justify-center" style={{ height: 330, background: "#F3F6FB", border: "1px solid var(--line)", fontSize: 12.5, color: "var(--muted)" }}>Загружаем карту Кызылорды…</div>}
+      <div className="kz-split">
+      <div>
+      {L && !failed ? <FleetLeafletMap L={L} items={items} focus={focus} onPick={setFocus} height={mapH} /> : failed ? <FleetSchemeMap items={items} focus={focus} onPick={setFocus} height={desktop ? 520 : 230} /> :
+        <div className="rounded-2xl flex items-center justify-center" style={{ height: mapH, background: "#F3F6FB", border: "1px solid var(--line)", fontSize: 12.5, color: "var(--muted)" }}>Загружаем карту Кызылорды…</div>}
       {failed && <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 6 }}>Карта не загрузилась (нет интернета) — показана схема маршрутов.</p>}
       <div className="flex items-center justify-between mt-2 mb-1 px-1">
         <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Демо: ускорить движение ×30</span>
         <Toggle checked={fast} onChange={setSpeed} />
       </div>
+      </div>
+      <div className="kz-split-side">
       <div className="flex gap-1.5 overflow-x-auto pb-1 mt-2 mb-2" style={{ scrollbarWidth: "none" }}>
         <button onClick={() => setFocus(null)} className="shrink-0 px-3 py-1.5 rounded-full font-semibold" style={{ fontSize: 11.5, background: !focus ? "var(--navy)" : "#F2F1F8", color: !focus ? "#fff" : "var(--ink)" }}>Все экспедиторы</button>
         {FLEET.map((d) => (
@@ -229,6 +236,8 @@ function MgFleet({ role, addAudit }) {
           </div>
         </MgCard>
       )}
+      </div>
+      </div>
       <p style={{ fontSize: 10.5, color: "var(--muted)", lineHeight: 1.45, marginTop: 4 }}>
         GPS фиксируется только в рабочее время и только на служебном маршруте. Карту видят только владелец и директор. Демо-режим: позиции рассчитаны по маршруту; в рабочей версии их присылает телефон водителя через сервер.
       </p>

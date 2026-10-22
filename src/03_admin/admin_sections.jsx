@@ -36,7 +36,7 @@ function AdminOrders({ orders, addAudit }) {
         ))}
       </div>
       <p className="font-mono-kz mb-2" style={{ fontSize: 11, color: "var(--muted)" }}>Найдено: {list.length}</p>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 kz-list">
         {list.map((o) => {
           const st = STATUS_STYLE[o.status];
           return (

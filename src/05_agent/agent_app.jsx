@@ -28,7 +28,7 @@ function AgentStores({ agent, agentStores, setAgentStores, onOpenStore, addAudit
       <button onClick={() => setAddOpen(true)} className="w-full rounded-2xl p-4 mb-4 flex items-center justify-center gap-2" style={{ border: "1.5px dashed var(--line)", color: "var(--navy)" }}>
         <Ico name="plus-circle" size={18} /><span style={{ fontSize: 13.5, fontWeight: 700 }}>Добавить магазин</span>
       </button>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 kz-list">
         {mine.map((s) => (
           <button key={s.id} onClick={() => onOpenStore(s)} className="text-left rounded-2xl p-3.5 flex items-center gap-3" style={{ background: "#fff", border: "1px solid var(--line)" }}>
             <div className="rounded-xl p-2.5 shrink-0" style={{ background: "#EEF0FF" }}><Ico name="store" size={18} color="var(--navy)" /></div>
@@ -84,7 +84,7 @@ function AgentStoreOrder({ store, warehouse, onBack, onSubmitOrder }) {
           {store.addr && <p className="truncate" style={{ fontSize: 11, color: "var(--muted)" }}>{store.addr}</p>}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-5 pb-24">
+      <div className="flex-1 overflow-y-auto px-5 pb-24 kz-main">
         <div className="relative mb-3 mt-1">
           <Ico name="search" size={16} style={{ position: "absolute", left: 13, top: 13 }} color="var(--muted)" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск товара..."
@@ -177,7 +177,7 @@ function AgentOrders({ agent, orders }) {
   return (
     <div className="px-5 pt-4 pb-4 font-body">
       <SectionTitle sub="Заказы, отправленные вами в обработку">Мои заказы</SectionTitle>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 kz-list">
         {mine.map((o) => {
           const st = STATUS_STYLE[o.status];
           return (
@@ -220,19 +220,7 @@ function AgentNav({ screen, setScreen }) {
     { id: "stores", icon: "store", label: "Магазины" },
     { id: "orders", icon: "clipboard", label: "Заказы" },
   ];
-  return (
-    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-around px-2 pt-2 pb-6" style={{ background: "#fff", borderTop: "1px solid var(--line)", paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}>
-      {items.map((it) => {
-        const active = screen === it.id;
-        return (
-          <button key={it.id} onClick={() => setScreen(it.id)} className="flex flex-col items-center gap-1 px-6 py-1">
-            <Ico name={it.icon} size={20} color={active ? "var(--navy)" : "var(--muted)"} strokeWidth={active ? 2.4 : 2} />
-            <span className="font-body" style={{ fontSize: 10, color: active ? "var(--navy)" : "var(--muted)", fontWeight: active ? 700 : 500 }}>{it.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <AppNav items={items} active={screen} onPick={setScreen} spread brand={<NavBrand title="Sapar Trade" sub="Торговый представитель" />} />;
 }
 
 function AgentApp({ agent, shared, onExit }) {
@@ -260,9 +248,9 @@ function AgentApp({ agent, shared, onExit }) {
   };
 
   return (
-    <div className="relative h-full flex flex-col" style={{ background: "var(--bg)" }}>
+    <div className={"relative h-full flex flex-col" + (activeStore ? "" : " kz-app")} style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="px-5 pb-2 flex items-center gap-2.5">
+      <div className="px-5 pb-2 flex items-center gap-2.5 kz-head">
         <div className="rounded-xl flex items-center justify-center" style={{ width: 32, height: 32, background: "#fff", border: "1px solid var(--line)" }}><Logo size={24} /></div>
         <div className="flex-1">
           <p className="font-display" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)" }}>{agent.name}</p>
@@ -278,7 +266,7 @@ function AgentApp({ agent, shared, onExit }) {
         {activeStore ? (
           <AgentStoreOrder store={activeStore} warehouse={warehouse} onBack={() => setActiveStore(null)} onSubmitOrder={submitOrder} />
         ) : (
-          <div className="flex-1 overflow-y-auto pb-24">
+          <div className="flex-1 overflow-y-auto pb-24 kz-main">
             {screen === "stores"
               ? <AgentStores agent={agent} agentStores={agentStores} setAgentStores={setAgentStores} onOpenStore={setActiveStore} addAudit={addAudit} />
               : <AgentOrders agent={agent} orders={orders} />}

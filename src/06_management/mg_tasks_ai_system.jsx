@@ -36,6 +36,7 @@ function MgTasks({ role, tasks, setTasks, addAudit, showToast }) {
       {canAssign && <PrimaryButton full onClick={() => setAdd(true)}><span className="flex items-center justify-center gap-2"><Ico name="plus" size={15} />Новая задача</span></PrimaryButton>}
       <div style={{ height: 12 }} />
       {mine.length === 0 && <p className="text-center py-8" style={{ fontSize: 12.5, color: "var(--muted)" }}>Задач пока нет</p>}
+      <div className="kz-list">
       {mine.map((t) => {
         const late = !["Выполнена", "Отклонена"].includes(t.status) && new Date(t.deadline) < sod(new Date());
         return (
@@ -51,6 +52,7 @@ function MgTasks({ role, tasks, setTasks, addAudit, showToast }) {
           </MgCard>
         );
       })}
+      </div>
       {add && (
         <Modal title="Новая задача" onClose={() => setAdd(false)} wide>
           <Field label="Что нужно сделать" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />

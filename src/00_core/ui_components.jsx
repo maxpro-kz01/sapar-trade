@@ -117,9 +117,9 @@ function Toggle({ checked, onChange }) {
 
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div className="absolute inset-0 z-40 flex items-end" style={{ background: "rgba(22,19,39,0.45)" }} onClick={onClose}>
+    <div className="absolute inset-0 z-40 flex items-end kz-modal" style={{ background: "rgba(22,19,39,0.45)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="w-full bg-white rounded-t-3xl overflow-hidden flex flex-col"
+        className="w-full bg-white rounded-t-3xl overflow-hidden flex flex-col kz-modal-box"
         style={{ maxHeight: wide ? "92%" : "80%" }}>
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--line)" }}>
           <h3 className="font-display" style={{ fontSize: 16, color: "var(--ink)", fontWeight: 700 }}>{title}</h3>

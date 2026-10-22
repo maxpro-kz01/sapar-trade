@@ -7,8 +7,11 @@
 ## Структура
 | Путь | Что |
 |---|---|
-| `public/index.html` | Прототип (публикуется на Render как статический сайт) |
-| `src/` | Тот же код, разбитый на 27 модулей по разделам (см. `src/README.md`) |
+| `public/index.html` | **Собранный** сайт (публикуется на Render). Не править руками — собирается командой `npm run build` |
+| `styles/` | Стили: `base.css` и `responsive.css` (телефон / планшет / компьютер) |
+| `build.mjs`, `src/modules.json`, `src/index.template.html` | Сборка: склейка модулей, компиляция JSX, вставка стилей |
+| `tools/screenshots.mjs` | Проверка вёрстки скриншотами на 375 / 768 / 1366 / 1920 px |
+| `src/` | Исходники: 29 модулей по разделам (см. `src/README.md`) |
 | `docs/` | ТЗ (KZ/RU), ТЗ на подключение 1С (`TZ_1C_INTEGRATION.md`), статус, архитектура, схема БД, API, справочник, промт для продолжения |
 | `render.yaml` | Настройки Render |
 
@@ -21,8 +24,19 @@
 ## Сайт
 https://sapar-trade.onrender.com
 
+## Разработка
+```bash
+npm ci            # один раз
+# правим src/*.jsx или styles/*.css
+npm run build     # собирает public/index.html
+npm run shots     # скриншоты на 4 размерах в папку shots/ (нужен Chromium)
+git add -A && git commit -m "..." && git push   # Render обновит сайт сам
+```
+Адаптивность: телефон < 768 px (меню снизу), планшет 768–1199 px, компьютер ≥ 1200 px (на всю ширину, меню слева).
+
 ## Деплой
 Render, статический сайт, публикуется папка `public/`, автодеплой при пуше в `main`.
+Сейчас Render отдаёт уже собранный `public/index.html` (команда сборки `echo`). Чтобы Render собирал сам, в настройках сервиса (Settings → Build Command) можно указать `npm ci && node build.mjs` — так же записано в `render.yaml`.
 
 ## Дальше
 План перевода в рабочую систему (Backend, БД, 1С, Sales Doctor, WhatsApp API, GPS) — `docs/STATUS_DONE_TODO.md` и `docs/ARCHITECTURE.md`.

@@ -1,0 +1,19 @@
+{
+  "name": "sapar-trade",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Sapar Trade — прототип системы управления (Кызылорда)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "shots": "node tools/screenshots.mjs"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-react": "^7.24.0",
+    "leaflet": "^1.9.4",
+    "playwright-core": "1.56",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

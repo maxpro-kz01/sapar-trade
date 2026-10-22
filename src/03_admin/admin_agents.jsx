@@ -43,7 +43,7 @@ function AdminAgents({ agents, setAgents, orders, addAudit }) {
       <button onClick={openAdd} className="w-full rounded-2xl p-4 mb-4 flex items-center justify-center gap-2" style={{ border: "1.5px dashed var(--line)", color: "var(--navy)" }}>
         <Ico name="plus-circle" size={18} /><span style={{ fontSize: 13.5, fontWeight: 700 }}>Добавить торгового представителя</span>
       </button>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 kz-list">
         {agents.map((a) => {
           const st = statsFor(a.login);
           return (

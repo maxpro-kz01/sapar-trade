@@ -15,20 +15,7 @@ function AdminNav({ screen, setScreen }) {
     { id: "audit", icon: "shield-check", label: "Аудит" },
     { id: "settings", icon: "settings", label: "Настройки" },
   ];
-  return (
-    <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1 px-2 pt-2 pb-6 overflow-x-auto" style={{ background: "#fff", borderTop: "1px solid var(--line)", scrollbarWidth: "none", paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}>
-      {items.map((it) => {
-        const active = screen === it.id;
-        return (
-          <button key={it.id} onClick={() => setScreen(it.id)} className="flex flex-col items-center gap-1 shrink-0 px-2.5 py-1 rounded-xl"
-            style={{ background: active ? "#EEF0FF" : "transparent" }}>
-            <Ico name={it.icon} size={18} color={active ? "var(--navy)" : "var(--muted)"} strokeWidth={active ? 2.4 : 2} />
-            <span className="font-body" style={{ fontSize: 9, color: active ? "var(--navy)" : "var(--muted)", fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+  return <AppNav items={items} active={screen} onPick={setScreen} brand={<NavBrand title="Sapar Trade" sub="Админ-панель" />} />;
 }
 
 function AdminApp({ shared, onExit }) {
@@ -39,9 +26,9 @@ function AdminApp({ shared, onExit }) {
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2400); };
 
   return (
-    <div className="relative h-full flex flex-col" style={{ background: "var(--bg)" }}>
+    <div className="relative h-full flex flex-col kz-app" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="px-5 pb-2 flex items-center gap-2.5">
+      <div className="px-5 pb-2 flex items-center gap-2.5 kz-head">
         <div className="rounded-xl flex items-center justify-center" style={{ width: 32, height: 32, background: "#fff", border: "1px solid var(--line)" }}><Logo size={24} /></div>
         <div className="flex-1">
           <p className="font-display" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)" }}>Sapar Trade</p>
@@ -59,7 +46,7 @@ function AdminApp({ shared, onExit }) {
           <span style={{ fontSize: 11, fontWeight: 700, color: "var(--red)" }}>Выход</span>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24 kz-main">
         {screen === "shift" && <AdminShift shift={shift} setShift={setShift} shiftHistory={shiftHistory} setShiftHistory={setShiftHistory}
           orders={orders} warehouse={warehouse} directorPhone={directorPhone} addAudit={addAudit} showToast={showToast} />}
         {screen === "orders" && <AdminOrders orders={orders} addAudit={addAudit} />}

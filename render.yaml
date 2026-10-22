@@ -2,7 +2,7 @@ services:
   - type: web
     runtime: static
     name: sapar-trade
-    buildCommand: echo "static prototype, no build"
+    buildCommand: npm ci && node build.mjs
     staticPublishPath: ./public
     routes:
       - type: rewrite

@@ -20,7 +20,7 @@ function MgmtLogin({ onCancel, onSuccess, addAudit, lang, setLang }) {
   return (
     <div className="relative h-full" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="flex flex-col h-full px-6 pt-4 font-body overflow-y-auto pb-8">
+      <div className="flex flex-col h-full px-6 pt-4 font-body overflow-y-auto pb-8 kz-narrow">
         <div className="flex items-center justify-between mb-4">
           <button onClick={role ? () => { setRole(null); setStep(1); setPwd(""); setCode(""); setErr(""); } : onCancel} className="p-2 -ml-2 rounded-full"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
           <LangSwitch lang={lang} setLang={setLang} />

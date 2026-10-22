@@ -67,7 +67,7 @@ function App() {
         .kz-root ::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="relative h-full w-full" style={{ maxWidth: 520, margin: "0 auto", background: "#fff" }}>
+      <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
         {view === "staffChoice" && <StaffGate onCancel={() => setView("client")} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : "agentLogin")} />}
         {view === "mgmtLogin" && <MgmtLogin addAudit={addAudit} onCancel={() => setView("staffChoice")} onSuccess={(r) => { setMgRole(r); setView("mgmt"); }} />}

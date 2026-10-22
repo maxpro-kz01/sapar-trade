@@ -115,7 +115,7 @@ function ClientOrders({ orders }) {
   return (
     <div className="px-5 pt-4 pb-4 font-body">
       <SectionTitle>Мои заказы</SectionTitle>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 kz-list">
         {orders.map((o) => {
           const st = STATUS_STYLE[o.status];
           return (

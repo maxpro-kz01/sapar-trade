@@ -7,7 +7,7 @@ function StaffGate({ onCancel, onPick }) {
   return (
     <div className="relative h-full" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="flex flex-col h-full px-6 pt-4 font-body">
+      <div className="flex flex-col h-full px-6 pt-4 font-body kz-narrow">
         <div className="flex items-center justify-between mb-6">
           <button onClick={onCancel} className="p-2 -ml-2 rounded-full"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
           <LangSwitch />
@@ -61,7 +61,7 @@ function AdminLogin({ onCancel, onSuccess }) {
   return (
     <div className="relative h-full" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="flex flex-col h-full px-6 pt-4 font-body">
+      <div className="flex flex-col h-full px-6 pt-4 font-body kz-narrow">
         <button onClick={onCancel} className="mb-6 p-2 -ml-2 rounded-full w-fit"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--navy)" }}>
@@ -100,7 +100,7 @@ function AgentLogin({ agents, onCancel, onSuccess }) {
   return (
     <div className="relative h-full" style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="flex flex-col h-full px-6 pt-4 font-body">
+      <div className="flex flex-col h-full px-6 pt-4 font-body kz-narrow">
         <button onClick={onCancel} className="mb-6 p-2 -ml-2 rounded-full w-fit"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: "#8A5A00" }}>

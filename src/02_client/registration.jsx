@@ -31,7 +31,7 @@ function PhoneField({ value, onChange }) {
 function RegPhone({ phone, setPhone, onNext, onToast, onAdminTrigger }) {
   const logoTap = useDoubleTap(onAdminTrigger);
   return (
-    <div className="flex flex-col h-full px-6 pt-4 font-body">
+    <div className="flex flex-col h-full px-6 pt-4 font-body kz-narrow">
       <div className="flex justify-end mb-2"><LangSwitch /></div>
       <div className="flex flex-col items-center mb-8">
         <button onClick={logoTap} className="p-1 rounded-2xl">
@@ -53,7 +53,7 @@ function RegPhone({ phone, setPhone, onNext, onToast, onAdminTrigger }) {
 
 function RegOtp({ otp, setOtp, onNext, onBack }) {
   return (
-    <div className="flex flex-col h-full px-6 pt-8 font-body">
+    <div className="flex flex-col h-full px-6 pt-8 font-body kz-narrow">
       <button onClick={onBack} className="mb-6 p-2 -ml-2 rounded-full w-fit"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
       <SectionTitle sub="Введите 4-значный код из WhatsApp">Подтверждение</SectionTitle>
       <input value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="••••" maxLength={4}
@@ -69,7 +69,7 @@ function RegOtp({ otp, setOtp, onNext, onBack }) {
 
 function RegProfile({ profile, setProfile, onFinish }) {
   return (
-    <div className="flex flex-col h-full px-6 pt-8 font-body">
+    <div className="flex flex-col h-full px-6 pt-8 font-body kz-narrow">
       <SectionTitle sub="Это займёт 30 секунд">Расскажите о себе</SectionTitle>
       <Field label="Ваше имя" placeholder="Например, Азамат" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
       <div className="flex items-center justify-between px-3.5 py-3.5 rounded-xl mb-3" style={{ border: "1.5px solid var(--line)" }}>

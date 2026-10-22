@@ -7,30 +7,21 @@ function ClientNav({ screen, setScreen, cartCount, onAdminTrigger }) {
   const items = [
     { id: "home", icon: "home", label: "Главная" },
     { id: "orders", icon: "clipboard", label: "Заказы" },
-    { id: "cart", icon: "cart", label: "Корзина" },
+    { id: "cart", icon: "cart", label: "Корзина", badge: cartCount },
     { id: "settings", icon: "settings", label: "Настройки" },
   ];
+  // одиночный тап по логотипу — «О компании», двойной — вход для сотрудников
   const logoTap = useDoubleTap(onAdminTrigger, () => setScreen("info"));
   return (
-    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-around px-2 pt-2 pb-6" style={{ background: "#fff", borderTop: "1px solid var(--line)", paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}>
-      {items.map((it) => {
-        const active = screen === it.id;
-        return (
-          <button key={it.id} onClick={() => setScreen(it.id)} className="flex flex-col items-center gap-1 relative px-2">
-            <Ico name={it.icon} size={20} color={active ? "var(--navy)" : "var(--muted)"} strokeWidth={active ? 2.4 : 2} />
-            {it.id === "cart" && cartCount > 0 && (
-              <span className="absolute rounded-full flex items-center justify-center font-mono-kz" style={{ top: -4, right: -2, width: 15, height: 15, background: "var(--red)", color: "#fff", fontSize: 8.5, fontWeight: 700 }}>{cartCount}</span>
-            )}
-            <span className="font-body" style={{ fontSize: 9.5, color: active ? "var(--navy)" : "var(--muted)", fontWeight: active ? 700 : 500 }}>{it.label}</span>
-          </button>
-        );
-      })}
-      <button onClick={logoTap} className="flex flex-col items-center gap-1 -mt-7">
-        <div className="rounded-full flex items-center justify-center shadow-lg" style={{ width: 46, height: 46, background: "#fff", border: `3px solid ${screen === "info" ? "var(--red)" : "#fff"}`, boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
-          <Logo size={30} />
-        </div>
-      </button>
-    </div>
+    <AppNav items={items} active={screen} onPick={setScreen} spread
+      brand={<NavBrand title="Sapar Trade" sub="Оптово-розничная торговля" onLogo={logoTap} />}
+      extra={
+        <button onClick={logoTap} className="flex flex-col items-center gap-1">
+          <div className="rounded-full flex items-center justify-center" style={{ width: 46, height: 46, background: "#fff", border: `3px solid ${screen === "info" ? "var(--red)" : "#fff"}`, boxShadow: "0 6px 16px rgba(0,0,0,0.18)" }}>
+            <Logo size={30} />
+          </div>
+        </button>
+      } />
   );
 }
 
@@ -95,9 +86,9 @@ function ClientApp({ shared, onAdminTrigger }) {
   }
 
   return (
-    <div className="relative h-full flex flex-col" style={{ background: "var(--bg)" }}>
+    <div className={"relative h-full flex flex-col" + (screen !== "info" ? " kz-app" : "")} style={{ background: "var(--bg)" }}>
       <StatusBar />
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24 kz-main">
         {screen === "home" && <ClientHome profile={profile} cart={cart} setCart={setCart} banners={banners} stories={stories}
           storiesViewed={storiesViewed} onOpenStories={() => setStoryOpen(true)}
           notifications={notifications} onOpenNotifs={() => setNotifOpen(true)}

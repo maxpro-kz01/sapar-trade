@@ -43,6 +43,7 @@ function MgOwnerHome({ role, cur, prev, rg, go, warehouse, problems, weights }) 
       <div className="grid grid-cols-2 gap-2 mb-3">
         {k.map((x, i) => <MgKpi key={i} label={x.l} value={x.v} cur={x.c} prev={x.p} invert={x.inv} noMoneyDelta={x.pp} accent={x.accent} onClick={() => go(x.tab)} />)}
       </div>
+      <div className="kz-cols2">
       <MgCard>
         <div className="flex justify-between items-center mb-1">
           <p style={{ fontSize: 13, fontWeight: 800 }}>Динамика выручки</p>
@@ -60,8 +61,13 @@ function MgOwnerHome({ role, cur, prev, rg, go, warehouse, problems, weights }) 
           <span>Факт: {shortMoney(cur.netRev)}</span><span>План: {shortMoney(cur.plan)}</span>
         </div>
       </MgCard>
+      </div>
+      <div className="kz-cols2">
+      <div>
       <MgLabel>Главные проблемы</MgLabel>
       {problems.slice(0, 4).map((p, i) => <MgProblemRow key={i} p={p} onGo={go} />)}
+      </div>
+      <div>
       <MgLabel>Эффективность команды</MgLabel>
       <MgCard onClick={() => go("team")}>
         {rating.slice(0, 3).map((x, i) => (
@@ -72,6 +78,8 @@ function MgOwnerHome({ role, cur, prev, rg, go, warehouse, problems, weights }) 
           </div>
         ))}
       </MgCard>
+      </div>
+      </div>
     </div>
   );
 }
@@ -193,6 +201,7 @@ function MgTeam({ role, weights, openTp }) {
         </MgCard>
       ))}
       <MgLabel>Рейтинг торговых представителей</MgLabel>
+      <div className="kz-list">
       {list.map((x, i) => (
         <MgCard key={x.tp.id} onClick={() => openTp(x.tp.id)}>
           <div className="flex items-center gap-2.5">
@@ -208,6 +217,7 @@ function MgTeam({ role, weights, openTp }) {
           </div>
         </MgCard>
       ))}
+      </div>
     </div>
   );
 }
@@ -373,6 +383,7 @@ function MgDriverHome({ addAudit, showToast }) {
       </MgCard>
       <MgDriverGps />
       <MgLabel>Маршрут и накладные</MgLabel>
+      <div className="kz-list">
       {list.map((d, i) => (
         <MgCard key={d.id} onClick={() => setOpen(d)}>
           <div className="flex justify-between mb-1">
@@ -386,6 +397,7 @@ function MgDriverHome({ addAudit, showToast }) {
           </div>
         </MgCard>
       ))}
+      </div>
       {open && (
         <Modal title={open.id + " · " + open.client} onClose={() => setOpen(null)}>
           <MgRow l="Сумма" v={money(open.total)} />
@@ -427,6 +439,7 @@ function MgStock({ role, warehouse }) {
           <button key={id} onClick={() => setTab(id)} className="flex-1 py-2 rounded-xl font-semibold" style={{ fontSize: 11.5, background: tab === id ? "var(--red)" : "#F2F1F8", color: tab === id ? "#fff" : "var(--ink)" }}>{l}</button>
         ))}
       </div>
+      <div className="kz-list">
       {list.map((p) => (
         <MgCard key={p.id}>
           <div className="flex justify-between mb-1" style={{ gap: 8 }}>
@@ -443,6 +456,7 @@ function MgStock({ role, warehouse }) {
           </div>
         </MgCard>
       ))}
+      </div>
     </div>
   );
 }
@@ -487,6 +501,7 @@ function MgClients({ role, addAudit }) {
           <button key={id} onClick={() => setF(id)} className="flex-1 py-2 rounded-xl font-semibold" style={{ fontSize: 11.5, background: f === id ? "var(--red)" : "#F2F1F8", color: f === id ? "#fff" : "var(--ink)" }}>{l}</button>
         ))}
       </div>
+      <div className="kz-list">
       {list.map((c) => (
         <MgCard key={c.id} onClick={() => { setOpen(c); addAudit(R.person, "Просмотр карточки клиента", c.name, "дебиторка " + money(c.debt)); }}>
           <div className="flex justify-between" style={{ gap: 8 }}>
@@ -499,6 +514,7 @@ function MgClients({ role, addAudit }) {
           </div>
         </MgCard>
       ))}
+      </div>
       {open && (
         <Modal title={open.name} onClose={() => setOpen(null)} wide>
           <MgRow l="Адрес" v={open.addr} />
@@ -530,6 +546,8 @@ function MgFinance({ role, cur, prev, rg, addAudit }) {
   const pay = MG.payables.reduce((s, p) => s + p.sum, 0);
   return (
     <div>
+      <div className="kz-cols2">
+      <div>
       {fin === "full" && (
         <MgCard>
           <p style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>P&L — отчёт о прибылях и убытках</p>
@@ -546,6 +564,14 @@ function MgFinance({ role, cur, prev, rg, addAudit }) {
           <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.4 }}>Статьи расходов и ставка налога — демо. Точная структура утверждается с бухгалтером 1С.</p>
         </MgCard>
       )}
+      {fin === "cash" && (
+        <MgCard>
+          <p style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>Расходы по статьям</p>
+          {cur.opexBy.map(([k, v]) => <MgRow key={k} l={k} v={money(Math.round(v))} />)}
+        </MgCard>
+      )}
+      </div>
+      <div>
       <MgCard>
         <p style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>Движение денег</p>
         <MgRow l="Поступило за период" v={money(Math.round(cur.cash))} strong />
@@ -560,12 +586,8 @@ function MgFinance({ role, cur, prev, rg, addAudit }) {
         <MgRow l="Мы должны поставщикам" v={shortMoney(pay)} />
         {MG.payables.map((p) => <MgRow key={p.name} l={p.name} v={shortMoney(p.sum) + " · " + p.due + " дн."} />)}
       </MgCard>
-      {fin === "cash" && (
-        <MgCard>
-          <p style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>Расходы по статьям</p>
-          {cur.opexBy.map(([k, v]) => <MgRow key={k} l={k} v={money(Math.round(v))} />)}
-        </MgCard>
-      )}
+      </div>
+      </div>
     </div>
   );
 }
