@@ -7,7 +7,11 @@ function App() {
   // view: "client" (customer-facing app) | "staffChoice" (hidden role picker, reached via
   // double‑tap on the logo) | "adminLogin" / "admin" (staff dashboard, admin/admin)
   // | "agentLogin" / "agent" (sales-rep dashboard, credentials issued by the admin)
-  const [view, setView] = useState("client");
+  // Рабочий режим: сессия живёт до закрытия вкладки; ссылка …/#work открывает рабочий вход сразу
+  const [liveSession, setLiveSessionState] = useState(() => stSession.get());
+  const setLiveSession = (v) => { stSession.set(v); setLiveSessionState(v); };
+  const [liveNotice, setLiveNotice] = useState("");
+  const [view, setView] = useState(() => (stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : "client"));
   const [loggedAgent, setLoggedAgent] = useState(null);
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
@@ -69,7 +73,10 @@ function App() {
 
       <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
-        {view === "staffChoice" && <StaffGate onCancel={() => setView("client")} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : "agentLogin")} />}
+        {view === "staffChoice" && <StaffGate onCancel={() => setView("client")} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : role === "live" ? "liveLogin" : "agentLogin")} />}
+        {view === "liveLogin" && <LiveLogin notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
+        {view === "live" && liveSession && <LiveApp session={liveSession} setSession={setLiveSession}
+          onExit={(msg) => { setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : "client"); }} />}
         {view === "mgmtLogin" && <MgmtLogin addAudit={addAudit} onCancel={() => setView("staffChoice")} onSuccess={(r) => { setMgRole(r); setView("mgmt"); }} />}
         {view === "mgmt" && mgRole && <MgmtApp role={mgRole} shared={shared} onExit={() => { addAudit(MG_ROLES[mgRole].person, "Выход из системы", MG_ROLES[mgRole].label, ""); setMgRole(null); setView("client"); }} />}
         {view === "adminLogin" && <AdminLogin onCancel={() => setView("staffChoice")} onSuccess={() => setView("admin")} />}

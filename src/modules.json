@@ -27,5 +27,11 @@
  "06_management/mg_screens.jsx",
  "06_management/mg_tasks_ai_system.jsx",
  "06_management/mg_app.jsx",
+ "07_live/api_client.js",
+ "07_live/live_ui.jsx",
+ "07_live/live_login.jsx",
+ "07_live/live_screens.jsx",
+ "07_live/live_admin.jsx",
+ "07_live/live_app.jsx",
  "00_core/root_app.jsx"
 ]

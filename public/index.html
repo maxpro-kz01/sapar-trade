@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
+<meta name="st-api" content="https://sapar-trade-api.onrender.com" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -6502,6 +6503,42 @@ function StaffGate({
       marginTop: 2
     }
   }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0440\u043E\u043B\u044C \u0434\u043B\u044F \u0432\u0445\u043E\u0434\u0430")), React.createElement("button", {
+    onClick: () => onPick("live"),
+    className: "rounded-2xl p-4 mb-3 flex items-center gap-3 press-98",
+    style: {
+      border: "1.5px solid #127A33",
+      background: "#E4F7EA"
+    }
+  }, React.createElement("div", {
+    className: "rounded-xl p-2.5",
+    style: {
+      background: "#127A33"
+    }
+  }, React.createElement(Ico, {
+    name: "shield-check",
+    size: 18,
+    color: "#fff"
+  })), React.createElement("div", {
+    className: "flex-1 text-left"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      color: "var(--ink)"
+    }
+  }, "\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0432\u0445\u043E\u0434 \xB7 \u0434\u0430\u043D\u043D\u044B\u0435 1\u0421"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, "\u041B\u0438\u0447\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0430")), React.createElement(Ico, {
+    name: "arrow-left",
+    size: 16,
+    color: "#127A33",
+    style: {
+      transform: "rotate(180deg)"
+    }
+  })), React.createElement("button", {
     onClick: () => onPick("admin"),
     className: "rounded-2xl p-4 mb-3 flex items-center gap-3 press-98",
     style: {
@@ -11371,8 +11408,1189 @@ function MgmtApp({
     toast: toast
   }));
 }
+const ST_API = ((document.querySelector('meta[name="st-api"]') || {}).content || "").replace(/\/$/, "");
+const stSession = {
+  get() {
+    try {
+      return JSON.parse(sessionStorage.getItem("st.session") || "null");
+    } catch (e) {
+      return null;
+    }
+  },
+  set(v) {
+    try {
+      v ? sessionStorage.setItem("st.session", JSON.stringify(v)) : sessionStorage.removeItem("st.session");
+    } catch (e) {}
+  }
+};
+class StApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+async function stApi(path, {
+  method = "GET",
+  body,
+  token,
+  timeoutMs = 75000
+} = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(ST_API + path, {
+      method,
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? {
+          Authorization: "Bearer " + token
+        } : {})
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch (e) {
+    throw new StApiError(0, e.name === "AbortError" ? "Сервер не ответил вовремя. Попробуйте ещё раз." : "Нет связи с сервером. Проверьте интернет.");
+  } finally {
+    clearTimeout(timer);
+  }
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {}
+  if (!res.ok) throw new StApiError(res.status, data && data.error || "Ошибка сервера (" + res.status + ")");
+  return data;
+}
+function useLive(session, path, onAuthLost) {
+  const [state, setState] = useState({
+    data: null,
+    error: null,
+    loading: true
+  });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setState(s => ({
+      ...s,
+      loading: true,
+      error: null
+    }));
+    stApi(path, {
+      token: session.token
+    }).then(data => alive && setState({
+      data,
+      error: null,
+      loading: false
+    })).catch(e => {
+      if (!alive) return;
+      if (e.status === 401 && onAuthLost) onAuthLost(e.message);
+      setState({
+        data: null,
+        error: e.message,
+        loading: false
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path, tick]);
+  return {
+    ...state,
+    reload: () => setTick(t => t + 1)
+  };
+}
+const ST_TZ = "Asia/Qyzylorda";
+const stToday = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: ST_TZ
+}).format(new Date());
+const stShift = (iso, days) => {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const stFmtDay = iso => iso ? iso.slice(8, 10) + "." + iso.slice(5, 7) : "";
+const stFmtDate = iso => iso ? iso.slice(8, 10) + "." + iso.slice(5, 7) + "." + iso.slice(0, 4) : "—";
+const stFmtTime = ts => ts ? new Date(ts).toLocaleString("ru-RU", {
+  timeZone: ST_TZ,
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit"
+}) : "—";
+const stMoney = n => n === null || n === undefined ? "—" : money(Math.round(n));
+const stNum = n => n === null || n === undefined ? "—" : Number(n).toLocaleString("ru-RU", {
+  maximumFractionDigits: 3
+});
+const ST_PERIODS = [["today", "Сегодня"], ["yesterday", "Вчера"], ["week", "7 дней"], ["month", "Этот месяц"], ["lmonth", "Прошлый месяц"], ["custom", "Свой период"]];
+function stRange(id, custom) {
+  const t = stToday();
+  if (id === "today") return {
+    from: t,
+    to: t
+  };
+  if (id === "yesterday") {
+    const y = stShift(t, -1);
+    return {
+      from: y,
+      to: y
+    };
+  }
+  if (id === "week") return {
+    from: stShift(t, -6),
+    to: t
+  };
+  if (id === "lmonth") {
+    const end = stShift(t.slice(0, 8) + "01", -1);
+    return {
+      from: end.slice(0, 8) + "01",
+      to: end
+    };
+  }
+  if (id === "custom" && custom.from && custom.to && custom.from <= custom.to) return {
+    from: custom.from,
+    to: custom.to
+  };
+  return {
+    from: t.slice(0, 8) + "01",
+    to: t
+  };
+}
+const stQs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== "" && v !== false && v !== null).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v === true ? "1" : v)).join("&");
+function LiveFreshness({
+  lastSync,
+  stale
+}) {
+  if (!lastSync) return React.createElement("div", {
+    className: "rounded-xl px-3 py-2 mb-3 flex items-center gap-2",
+    style: {
+      background: "#FFF6DE"
+    }
+  }, React.createElement(Ico, {
+    name: "clock",
+    size: 14,
+    color: "#8A5A00"
+  }), React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "#8A5A00",
+      fontWeight: 600
+    }
+  }, "\u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0437 1\u0421 \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u043B\u0438\u0441\u044C. \u041D\u0443\u0436\u043D\u043E \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0430\u0433\u0435\u043D\u0442 \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435 1\u0421."));
+  return React.createElement("div", {
+    className: "rounded-xl px-3 py-2 mb-3 flex items-center gap-2",
+    style: {
+      background: stale ? "#FCE7E6" : "#E4F7EA"
+    }
+  }, React.createElement(Ico, {
+    name: "clock",
+    size: 14,
+    color: stale ? "#B3261E" : "#127A33"
+  }), React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: stale ? "#B3261E" : "#127A33",
+      fontWeight: 600
+    }
+  }, stale ? "Данные устарели. " : "1С · ", "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ", stFmtTime(lastSync)));
+}
+function LivePeriodBar({
+  period,
+  setPeriod,
+  custom,
+  setCustom
+}) {
+  return React.createElement("div", {
+    className: "mb-3"
+  }, React.createElement("div", {
+    className: "flex gap-1.5 overflow-x-auto pb-1",
+    style: {
+      scrollbarWidth: "none"
+    }
+  }, ST_PERIODS.map(([id, l]) => React.createElement("button", {
+    key: id,
+    onClick: () => setPeriod(id),
+    className: "shrink-0 px-3 py-1.5 rounded-full font-semibold",
+    style: {
+      fontSize: 11.5,
+      background: period === id ? "var(--navy)" : "#F2F1F8",
+      color: period === id ? "#fff" : "var(--ink)"
+    }
+  }, l))), period === "custom" && React.createElement("div", {
+    className: "flex gap-2 mt-2"
+  }, React.createElement("input", {
+    type: "date",
+    value: custom.from,
+    onChange: e => setCustom({
+      ...custom,
+      from: e.target.value
+    }),
+    className: "font-mono-kz flex-1 px-3 py-2 rounded-xl",
+    style: {
+      border: "1px solid var(--line)",
+      fontSize: 12
+    }
+  }), React.createElement("input", {
+    type: "date",
+    value: custom.to,
+    onChange: e => setCustom({
+      ...custom,
+      to: e.target.value
+    }),
+    className: "font-mono-kz flex-1 px-3 py-2 rounded-xl",
+    style: {
+      border: "1px solid var(--line)",
+      fontSize: 12
+    }
+  })));
+}
+function LiveState({
+  loading,
+  error,
+  onRetry,
+  empty
+}) {
+  if (loading) return React.createElement("p", {
+    className: "text-center py-8",
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)"
+    }
+  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430\u2026");
+  if (error) return React.createElement("div", {
+    className: "rounded-2xl p-4 text-center",
+    style: {
+      background: "#FCE7E6"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      fontWeight: 600,
+      marginBottom: 8
+    }
+  }, error), onRetry && React.createElement(GhostButton, {
+    small: true,
+    onClick: onRetry
+  }, "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C"));
+  if (empty) return React.createElement("p", {
+    className: "text-center py-8",
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)"
+    }
+  }, empty);
+  return null;
+}
+function LiveSearch({
+  value,
+  onChange,
+  placeholder
+}) {
+  return React.createElement("div", {
+    className: "flex items-center gap-2 rounded-xl px-3 mb-3",
+    style: {
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement(Ico, {
+    name: "search",
+    size: 15,
+    color: "var(--muted)"
+  }), React.createElement("input", {
+    value: value,
+    onChange: e => onChange(e.target.value),
+    placeholder: placeholder,
+    className: "flex-1 py-2.5 bg-transparent outline-none",
+    style: {
+      fontSize: 13
+    }
+  }), value && React.createElement("button", {
+    onClick: () => onChange("")
+  }, React.createElement(Ico, {
+    name: "x",
+    size: 14,
+    color: "var(--muted)"
+  })));
+}
+function useDebounced(value, ms = 400) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+function LiveChip({
+  on,
+  onClick,
+  children
+}) {
+  return React.createElement("button", {
+    onClick: onClick,
+    className: "shrink-0 px-3 py-1.5 rounded-full font-semibold",
+    style: {
+      fontSize: 11.5,
+      background: on ? "var(--navy)" : "#F2F1F8",
+      color: on ? "#fff" : "var(--ink)"
+    }
+  }, children);
+}
+function LiveItem({
+  title,
+  sub,
+  value,
+  valueSub,
+  valueColor
+}) {
+  return React.createElement("div", {
+    className: "flex items-start gap-3 py-2.5",
+    style: {
+      borderBottom: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "var(--ink)",
+      wordBreak: "break-word"
+    }
+  }, title), sub && React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 1
+    }
+  }, sub)), React.createElement("div", {
+    className: "text-right shrink-0"
+  }, React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: valueColor || "var(--ink)"
+    }
+  }, value), valueSub && React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 1
+    }
+  }, valueSub)));
+}
+const liveCan = (session, ...perms) => perms.some(p => (session.perms || []).includes(p));
+function LiveLogin({
+  onCancel,
+  onSuccess,
+  notice
+}) {
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [err, setErr] = useState(notice || "");
+  const submit = async () => {
+    if (!login || !password || busy) return;
+    setBusy(true);
+    setErr("");
+    setSlow(false);
+    const t = setTimeout(() => setSlow(true), 4000);
+    try {
+      const r = await stApi("/api/auth/login", {
+        method: "POST",
+        body: {
+          login: login.trim(),
+          password
+        }
+      });
+      onSuccess({
+        token: r.token,
+        user: r.user,
+        perms: r.perms
+      });
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      clearTimeout(t);
+      setBusy(false);
+      setSlow(false);
+    }
+  };
+  return React.createElement("div", {
+    className: "relative h-full",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "flex flex-col h-full px-6 pt-4 font-body overflow-y-auto pb-8 kz-narrow"
+  }, React.createElement("button", {
+    onClick: onCancel,
+    className: "mb-6 p-2 -ml-2 rounded-full w-fit"
+  }, React.createElement(Ico, {
+    name: "arrow-left",
+    size: 20,
+    color: "var(--ink)"
+  })), React.createElement("div", {
+    className: "flex flex-col items-center mb-6"
+  }, React.createElement("div", {
+    className: "w-16 h-16 rounded-2xl flex items-center justify-center mb-3",
+    style: {
+      background: "var(--navy)"
+    }
+  }, React.createElement(Ico, {
+    name: "bar-chart",
+    size: 28,
+    color: "#fff"
+  })), React.createElement("h1", {
+    className: "font-display text-center",
+    style: {
+      fontSize: 18,
+      fontWeight: 800,
+      color: "var(--ink)"
+    }
+  }, "\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0432\u0445\u043E\u0434"), React.createElement("p", {
+    className: "text-center",
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)",
+      marginTop: 2
+    }
+  }, "\u0420\u0435\u0430\u043B\u044C\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u0437 1\u0421 \xB7 \u043B\u0438\u0447\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C")), React.createElement(Field, {
+    label: "\u041B\u043E\u0433\u0438\u043D",
+    value: login,
+    autoCapitalize: "none",
+    autoCorrect: "off",
+    spellCheck: "false",
+    autoComplete: "username",
+    onChange: e => {
+      setLogin(e.target.value);
+      setErr("");
+    }
+  }), React.createElement(Field, {
+    label: "\u041F\u0430\u0440\u043E\u043B\u044C",
+    type: "password",
+    value: password,
+    autoComplete: "current-password",
+    onChange: e => {
+      setPassword(e.target.value);
+      setErr("");
+    },
+    onKeyDown: e => {
+      if (e.key === "Enter") submit();
+    }
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--red)",
+      fontWeight: 600,
+      marginBottom: 12
+    }
+  }, err), slow && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginBottom: 12
+    }
+  }, "\u0421\u0435\u0440\u0432\u0435\u0440 \u043F\u0440\u043E\u0441\u044B\u043F\u0430\u0435\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u0440\u043E\u0441\u0442\u043E\u044F \u2014 \u044D\u0442\u043E \u043C\u043E\u0436\u0435\u0442 \u0437\u0430\u043D\u044F\u0442\u044C \u0434\u043E \u043C\u0438\u043D\u0443\u0442\u044B\u2026"), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: !login || !password || busy,
+    onClick: submit
+  }, busy ? "Вход…" : "Войти"), React.createElement("p", {
+    className: "text-center mt-4",
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, "\u041B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C \u0432\u044B\u0434\u0430\u0451\u0442 \u0432\u043B\u0430\u0434\u0435\u043B\u0435\u0446. \u0417\u0430\u0431\u044B\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C \u2014 \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u0435\u0441\u044C \u043A \u043D\u0435\u043C\u0443.")));
+}
+function LiveHome({
+  session,
+  range,
+  authLost,
+  go
+}) {
+  const r = useLive(session, "/api/dashboard?" + stQs(range), authLost);
+  const d = r.data;
+  if (!d) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  const s = d.sales;
+  const tiles = [];
+  if (s) {
+    tiles.push(["Выручка", stMoney(s.revenue), () => go("sales")]);
+    if (s.marginPct !== undefined) tiles.push(["Маржа", s.marginPct === null ? "—" : fp(s.marginPct)]);
+    if (s.gross !== undefined) tiles.push(["Валовая прибыль", stMoney(s.gross)]);
+    if (s.cost !== undefined) tiles.push(["Себестоимость", stMoney(s.cost)]);
+    tiles.push(["Клиентов с покупками", stNum(s.clients), () => go("clients")]);
+    tiles.push(["В среднем за день", stMoney(s.avgPerDay)]);
+  }
+  if (d.stock) tiles.push(["Склад по цене продажи", stMoney(d.stock.value), () => go("stock")]);
+  if (d.debts) {
+    tiles.push(["Дебиторка", stMoney(d.debts.total), () => go("clients")]);
+    tiles.push(["Просрочено > " + d.debts.overdueDays + " дн.", stMoney(d.debts.overdue), () => go("clients")]);
+  }
+  return React.createElement(React.Fragment, null, React.createElement(LiveFreshness, {
+    lastSync: d.lastSync,
+    stale: d.stale
+  }), tiles.length === 0 && React.createElement(LiveState, {
+    empty: "\u0414\u043B\u044F \u0432\u0430\u0448\u0435\u0439 \u0440\u043E\u043B\u0438 \u043D\u0430 \u0433\u043B\u0430\u0432\u043D\u043E\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442 \u043F\u043E\u043A\u0430\u0437\u0430\u0442\u0435\u043B\u0435\u0439"
+  }), React.createElement("div", {
+    className: "grid gap-2 mb-3",
+    style: {
+      gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))"
+    }
+  }, tiles.map(([l, v, onClick]) => React.createElement(MgKpi, {
+    key: l,
+    label: l,
+    value: v,
+    onClick: onClick
+  }))), d.stock && (d.stock.negative > 0 || d.stock.noPrice > 0) && React.createElement(MgCard, {
+    style: {
+      background: "#FFF6DE",
+      borderColor: "#F5D68A"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#8A5A00",
+      fontWeight: 600
+    }
+  }, d.stock.negative > 0 && React.createElement(React.Fragment, null, "\u041E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u043E\u0441\u0442\u0430\u0442\u043A\u043E\u0432: ", d.stock.negative, ". "), d.stock.noPrice > 0 && React.createElement(React.Fragment, null, "\u0422\u043E\u0432\u0430\u0440\u043E\u0432 \u0431\u0435\u0437 \u0446\u0435\u043D\u044B \xAB", d.stock.priceType || "—", "\xBB: ", d.stock.noPrice, "."))), React.createElement("div", {
+    className: "kz-cols2"
+  }, d.daily && d.daily.length > 0 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0412\u044B\u0440\u0443\u0447\u043A\u0430 \u043F\u043E \u0434\u043D\u044F\u043C"), React.createElement(MgTrend, {
+    data: d.daily.map(x => ({
+      v: x.revenue,
+      label: stFmtDay(x.day)
+    }))
+  })), d.topProducts && d.topProducts.length > 0 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0422\u043E\u043F \u0442\u043E\u0432\u0430\u0440\u043E\u0432"), d.topProducts.map(x => React.createElement(LiveItem, {
+    key: x.code,
+    title: x.name,
+    sub: stNum(x.qty) + " шт",
+    value: stMoney(x.revenue),
+    valueSub: x.marginPct !== undefined ? "маржа " + (x.marginPct === null ? "—" : fp(x.marginPct)) : null
+  }))), d.topClients && d.topClients.length > 0 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0422\u043E\u043F \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432"), d.topClients.map(x => React.createElement(LiveItem, {
+    key: x.code || "none",
+    title: x.name,
+    value: stMoney(x.revenue)
+  })))));
+}
+function LiveSales({
+  session,
+  range,
+  authLost
+}) {
+  const [group, setGroup] = useState("day");
+  const r = useLive(session, "/api/sales?" + stQs({
+    ...range,
+    group
+  }), authLost);
+  const items = r.data ? r.data.items : [];
+  const hasMargin = items.some(x => x.marginPct !== undefined);
+  const hasGross = items.some(x => x.gross !== undefined);
+  const total = items.reduce((a, x) => a + x.revenue, 0);
+  const exportCsv = () => {
+    const head = ["Название", "Кол-во", "Выручка"].concat(hasGross ? ["Себестоимость", "Валовая"] : []).concat(hasMargin ? ["Маржа %"] : []);
+    const rows = items.map(x => [group === "day" ? stFmtDate(x.name) : x.name, x.qty, x.revenue].concat(hasGross ? [x.cost, x.gross] : []).concat(hasMargin ? [x.marginPct === null ? "" : x.marginPct] : []));
+    downloadCsv(`sapar-prodazhi-${range.from}_${range.to}.csv`, [head, ...rows]);
+    stApi("/api/export-log", {
+      method: "POST",
+      token: session.token,
+      body: {
+        screen: "sales:" + group,
+        rows: rows.length
+      }
+    }).catch(() => {});
+  };
+  return React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "flex gap-1.5 mb-3 overflow-x-auto"
+  }, [["day", "По дням"], ["product", "По товарам"], ["client", "По клиентам"]].map(([id, l]) => React.createElement(LiveChip, {
+    key: id,
+    on: group === id,
+    onClick: () => setGroup(id)
+  }, l)), React.createElement("div", {
+    className: "flex-1"
+  }), items.length > 0 && React.createElement("button", {
+    onClick: exportCsv,
+    className: "shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1",
+    style: {
+      fontSize: 11.5,
+      background: "#F2F1F8",
+      fontWeight: 700
+    }
+  }, React.createElement(Ico, {
+    name: "download",
+    size: 13
+  }), "CSV")), r.data && React.createElement(LiveFreshness, {
+    lastSync: r.data.lastSync,
+    stale: r.data.stale
+  }), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: r.data && !items.length ? "Продаж за период нет" : null
+  })), items.length > 0 && React.createElement(MgCard, null, React.createElement(MgRow, {
+    l: "\u0418\u0442\u043E\u0433\u043E \u0432\u044B\u0440\u0443\u0447\u043A\u0430",
+    v: stMoney(total),
+    strong: true
+  }), group === "client" && hasMargin && React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 6
+    }
+  }, "\u0421\u0435\u0431\u0435\u0441\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C \u0432 1\u0421 \u0432\u0435\u0434\u0451\u0442\u0441\u044F \u043F\u043E \u0442\u043E\u0432\u0430\u0440\u0430\u043C, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u043C\u0430\u0440\u0436\u0430 \u043F\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u0430\u043C \u043D\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F."), React.createElement("div", {
+    className: "mt-1"
+  }, items.map(x => React.createElement(LiveItem, {
+    key: x.key || "none",
+    title: group === "day" ? stFmtDate(x.name) : x.name,
+    sub: [stNum(x.qty) + " шт", x.group_name, x.manager, x.last_day ? "посл. покупка " + stFmtDate(x.last_day) : null].filter(Boolean).join(" · "),
+    value: stMoney(x.revenue),
+    valueSub: [x.gross !== undefined ? "валовая " + shortMoney(x.gross) : null, x.marginPct !== undefined ? x.marginPct === null ? "—" : fp(x.marginPct) : null].filter(Boolean).join(" · ") || null
+  })))));
+}
+function LiveStock({
+  session,
+  authLost
+}) {
+  const [wh, setWh] = useState("");
+  const [q, setQ] = useState("");
+  const [low, setLow] = useState(false);
+  const dq = useDebounced(q);
+  const r = useLive(session, "/api/stock?" + stQs({
+    warehouse: wh,
+    q: dq,
+    low
+  }), authLost);
+  const d = r.data;
+  return React.createElement(React.Fragment, null, d && React.createElement(LiveFreshness, {
+    lastSync: d.lastSync,
+    stale: d.stale
+  }), d && d.warehouses.length > 0 && React.createElement("div", {
+    className: "flex gap-1.5 mb-3 overflow-x-auto pb-1"
+  }, React.createElement(LiveChip, {
+    on: !wh,
+    onClick: () => setWh("")
+  }, "\u0412\u0441\u0435 \u0441\u043A\u043B\u0430\u0434\u044B"), d.warehouses.map(w => React.createElement(LiveChip, {
+    key: w.code,
+    on: wh === w.code,
+    onClick: () => setWh(w.code)
+  }, w.name, " \xB7 ", shortMoney(w.value)))), React.createElement(LiveSearch, {
+    value: q,
+    onChange: setQ,
+    placeholder: "\u0422\u043E\u0432\u0430\u0440, \u0430\u0440\u0442\u0438\u043A\u0443\u043B \u0438\u043B\u0438 \u043A\u043E\u0434"
+  }), React.createElement("label", {
+    className: "flex items-center gap-2 mb-3",
+    style: {
+      fontSize: 12.5
+    }
+  }, React.createElement(Toggle, {
+    checked: low,
+    onChange: setLow
+  }), " \u0422\u043E\u043B\u044C\u043A\u043E \u043D\u0443\u043B\u0435\u0432\u044B\u0435 \u0438 \u043E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0435"), d && d.priceType && React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginBottom: 6
+    }
+  }, "\u0421\u0443\u043C\u043C\u0430 \u2014 \u043F\u043E \u0442\u0438\u043F\u0443 \u0446\u0435\u043D \xAB", d.priceType, "\xBB"), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: d && !d.items.length ? "Ничего не найдено" : null
+  })), d && d.items.length > 0 && React.createElement(MgCard, null, React.createElement("div", {
+    className: "kz-list",
+    style: {
+      display: "block"
+    }
+  }, d.items.map(x => React.createElement(LiveItem, {
+    key: x.warehouse_code + "|" + x.code,
+    title: x.name,
+    sub: [x.warehouse, x.group_name, x.sku].filter(Boolean).join(" · "),
+    value: stNum(x.qty) + " " + (x.unit || ""),
+    valueColor: x.qty <= 0 ? "var(--red)" : undefined,
+    valueSub: x.price === null ? "нет цены" : stMoney(x.value)
+  }))), d.items.length >= 500 && React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 6
+    }
+  }, "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u043F\u0435\u0440\u0432\u044B\u0435 500 \u2014 \u0443\u0442\u043E\u0447\u043D\u0438\u0442\u0435 \u043F\u043E\u0438\u0441\u043A")));
+}
+function LiveClients({
+  session,
+  range,
+  authLost
+}) {
+  const [q, setQ] = useState("");
+  const [debtors, setDebtors] = useState(false);
+  const dq = useDebounced(q);
+  const r = useLive(session, "/api/clients?" + stQs({
+    ...range,
+    q: dq,
+    debtors
+  }), authLost);
+  const d = r.data;
+  const totals = d ? d.items.reduce((a, x) => ({
+    debt: a.debt + (x.debt || 0),
+    overdue: a.overdue + (x.overdue || 0)
+  }), {
+    debt: 0,
+    overdue: 0
+  }) : null;
+  const hasDebt = d && d.items.some(x => x.debt !== undefined);
+  return React.createElement(React.Fragment, null, d && React.createElement(LiveFreshness, {
+    lastSync: d.lastSync,
+    stale: d.stale
+  }), React.createElement(LiveSearch, {
+    value: q,
+    onChange: setQ,
+    placeholder: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435, \u0442\u0435\u043B\u0435\u0444\u043E\u043D \u0438\u043B\u0438 \u043A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430"
+  }), (hasDebt || debtors) && React.createElement("label", {
+    className: "flex items-center gap-2 mb-3",
+    style: {
+      fontSize: 12.5
+    }
+  }, React.createElement(Toggle, {
+    checked: debtors,
+    onChange: setDebtors
+  }), " \u0422\u043E\u043B\u044C\u043A\u043E \u0434\u043E\u043B\u0436\u043D\u0438\u043A\u0438"), hasDebt && React.createElement("div", {
+    className: "grid gap-2 mb-3",
+    style: {
+      gridTemplateColumns: "1fr 1fr"
+    }
+  }, React.createElement(MgKpi, {
+    label: "\u0414\u043E\u043B\u0433 \u0432 \u0441\u043F\u0438\u0441\u043A\u0435",
+    value: stMoney(totals.debt)
+  }), React.createElement(MgKpi, {
+    label: "Просрочено > " + d.overdueDays + " дн.",
+    value: stMoney(totals.overdue),
+    accent: totals.overdue > 0 ? "#F3B4B0" : undefined
+  })), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: d && !d.items.length ? "Клиенты не найдены" : null
+  })), d && d.items.length > 0 && React.createElement(MgCard, null, d.items.map(x => React.createElement(LiveItem, {
+    key: x.code,
+    title: x.name,
+    sub: [x.manager, x.phone, x.lastSale ? "посл. покупка " + stFmtDate(x.lastSale) : null].filter(Boolean).join(" · "),
+    value: x.debt !== undefined ? stMoney(x.debt) : stMoney(x.revenue),
+    valueColor: x.overdue > 0 ? "var(--red)" : undefined,
+    valueSub: x.debt !== undefined ? x.overdue > 0 ? "просрочено " + shortMoney(x.overdue) : x.debt > 0 ? "с " + stFmtDate(x.oldestDebt) : "долга нет" : null
+  }))));
+}
+const LIVE_ENTITY_NAMES = {
+  products: "Товары",
+  warehouses: "Склады",
+  clients: "Клиенты",
+  prices: "Цены",
+  stock: "Остатки",
+  debts: "Долги клиентов",
+  sales: "Продажи",
+  cost: "Себестоимость"
+};
+const LIVE_ROLES = {
+  owner: "Владелец",
+  director: "Директор",
+  supervisor: "Супервайзер",
+  tp: "Торговый представитель",
+  accountant: "Бухгалтер",
+  financier: "Финансист",
+  warehouse: "Склад",
+  admin: "Администратор",
+  driver: "Водитель-экспедитор"
+};
+function LiveSync({
+  session,
+  authLost
+}) {
+  const r = useLive(session, "/api/sync/status", authLost);
+  const d = r.data;
+  if (!d) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  return React.createElement(React.Fragment, null, React.createElement(LiveFreshness, {
+    lastSync: d.lastSync,
+    stale: d.stale
+  }), React.createElement(MgCard, null, React.createElement("div", {
+    className: "flex items-center justify-between"
+  }, React.createElement(MgLabel, null, "1\u0421 \u2192 Sapar Trade"), React.createElement(GhostButton, {
+    small: true,
+    onClick: r.reload
+  }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C")), d.items.map(x => React.createElement(LiveItem, {
+    key: x.entity,
+    title: LIVE_ENTITY_NAMES[x.entity] || x.entity,
+    sub: x.lastError && (!x.lastOk || new Date(x.lastError.at) > new Date(x.lastOk)) ? "Ошибка: " + x.lastError.error : null,
+    value: x.lastOk ? stFmtTime(x.lastOk) : "не загружалось",
+    valueColor: x.stale ? "var(--red)" : "#127A33",
+    valueSub: x.rows !== null && x.rows !== undefined ? stNum(x.rows) + " строк" : null
+  }))), React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0416\u0443\u0440\u043D\u0430\u043B \u0437\u0430\u0433\u0440\u0443\u0437\u043E\u043A"), d.log.length === 0 && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    }
+  }, "\u041F\u043E\u043A\u0430 \u043F\u0443\u0441\u0442\u043E"), d.log.map(x => React.createElement(LiveItem, {
+    key: x.id,
+    title: (LIVE_ENTITY_NAMES[x.entity] || x.entity) + (x.agent_host ? " · " + x.agent_host : ""),
+    sub: x.error,
+    value: x.ok ? "OK" : x.ok === false ? "Ошибка" : "…",
+    valueColor: x.ok ? "#127A33" : "var(--red)",
+    valueSub: stFmtTime(x.started_at) + (x.rows_in !== null ? " · " + stNum(x.rows_in) : "")
+  }))));
+}
+function LiveUsers({
+  session,
+  authLost,
+  showToast
+}) {
+  const r = useLive(session, "/api/users", authLost);
+  const [form, setForm] = useState(null);
+  const [err, setErr] = useState("");
+  const roles = Object.entries(LIVE_ROLES).filter(([id]) => session.user.role === "owner" || !["owner", "director"].includes(id));
+  const save = async () => {
+    setErr("");
+    try {
+      await stApi("/api/users", {
+        method: "POST",
+        token: session.token,
+        body: form
+      });
+      setForm(null);
+      showToast("Сотрудник создан");
+      r.reload();
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+  const toggle = async u => {
+    try {
+      await stApi("/api/users/" + u.id, {
+        method: "PATCH",
+        token: session.token,
+        body: {
+          isActive: !u.isActive
+        }
+      });
+      showToast(u.isActive ? "Доступ закрыт" : "Доступ открыт");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  return React.createElement(React.Fragment, null, React.createElement(PrimaryButton, {
+    full: true,
+    onClick: () => setForm({
+      login: "",
+      name: "",
+      role: "tp",
+      password: "",
+      manager1c: ""
+    })
+  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0430"), React.createElement("div", {
+    className: "mt-3"
+  }), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  })), r.data && React.createElement(MgCard, null, r.data.map(u => React.createElement("div", {
+    key: u.id,
+    className: "flex items-center gap-3 py-2.5",
+    style: {
+      borderBottom: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: u.isActive ? "var(--ink)" : "var(--muted)"
+    }
+  }, u.name, " ", React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, u.login)), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, LIVE_ROLES[u.role] || u.role, u.manager1c ? " · 1С: " + u.manager1c : "", u.lastLoginAt ? " · вход " + stFmtTime(u.lastLoginAt) : "")), u.id !== session.user.id && React.createElement(GhostButton, {
+    small: true,
+    onClick: () => toggle(u)
+  }, u.isActive ? "Закрыть доступ" : "Открыть")))), form && React.createElement(Modal, {
+    title: "\u041D\u043E\u0432\u044B\u0439 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A",
+    onClose: () => setForm(null)
+  }, React.createElement(Field, {
+    label: "\u0418\u043C\u044F",
+    value: form.name,
+    onChange: e => setForm({
+      ...form,
+      name: e.target.value
+    })
+  }), React.createElement(Field, {
+    label: "\u041B\u043E\u0433\u0438\u043D (\u043B\u0430\u0442\u0438\u043D\u0438\u0446\u0430)",
+    value: form.login,
+    autoCapitalize: "none",
+    onChange: e => setForm({
+      ...form,
+      login: e.target.value.trim()
+    })
+  }), React.createElement("label", {
+    style: {
+      fontSize: 12,
+      fontWeight: 600,
+      color: "var(--muted)"
+    }
+  }, "\u0420\u043E\u043B\u044C"), React.createElement("select", {
+    value: form.role,
+    onChange: e => setForm({
+      ...form,
+      role: e.target.value
+    }),
+    className: "w-full px-3 py-3 rounded-xl mb-3 mt-1",
+    style: {
+      border: "1.5px solid var(--line)",
+      fontSize: 14,
+      background: "#fff"
+    }
+  }, roles.map(([id, l]) => React.createElement("option", {
+    key: id,
+    value: id
+  }, l))), ["tp", "supervisor"].includes(form.role) && React.createElement(Field, {
+    label: "\u041C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u0432 1\u0421 (\u043A\u0430\u043A \u0432 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430; \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u2014 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E)",
+    value: form.manager1c,
+    onChange: e => setForm({
+      ...form,
+      manager1c: e.target.value
+    })
+  }), React.createElement(Field, {
+    label: "\u041F\u0430\u0440\u043E\u043B\u044C (\u043D\u0435 \u043C\u0435\u043D\u044C\u0448\u0435 8 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432, \u0431\u0443\u043A\u0432\u044B \u0438 \u0446\u0438\u0444\u0440\u044B)",
+    type: "password",
+    value: form.password,
+    onChange: e => setForm({
+      ...form,
+      password: e.target.value
+    })
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--red)",
+      marginBottom: 10
+    }
+  }, err), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: !form.login || !form.password,
+    onClick: save
+  }, "\u0421\u043E\u0437\u0434\u0430\u0442\u044C")));
+}
+function LivePasswordModal({
+  session,
+  onClose,
+  onChanged
+}) {
+  const [f, setF] = useState({
+    oldPassword: "",
+    newPassword: "",
+    repeat: ""
+  });
+  const [err, setErr] = useState("");
+  const save = async () => {
+    if (f.newPassword !== f.repeat) {
+      setErr("Пароли не совпадают");
+      return;
+    }
+    try {
+      const r = await stApi("/api/auth/password", {
+        method: "POST",
+        token: session.token,
+        body: {
+          oldPassword: f.oldPassword,
+          newPassword: f.newPassword
+        }
+      });
+      onChanged(r.token);
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+  return React.createElement(Modal, {
+    title: "\u0421\u043C\u0435\u043D\u0430 \u043F\u0430\u0440\u043E\u043B\u044F",
+    onClose: onClose
+  }, React.createElement(Field, {
+    label: "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0430\u0440\u043E\u043B\u044C",
+    type: "password",
+    value: f.oldPassword,
+    onChange: e => setF({
+      ...f,
+      oldPassword: e.target.value
+    })
+  }), React.createElement(Field, {
+    label: "\u041D\u043E\u0432\u044B\u0439 \u043F\u0430\u0440\u043E\u043B\u044C",
+    type: "password",
+    value: f.newPassword,
+    onChange: e => setF({
+      ...f,
+      newPassword: e.target.value
+    })
+  }), React.createElement(Field, {
+    label: "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043D\u043E\u0432\u044B\u0439 \u043F\u0430\u0440\u043E\u043B\u044C",
+    type: "password",
+    value: f.repeat,
+    onChange: e => setF({
+      ...f,
+      repeat: e.target.value
+    })
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--red)",
+      marginBottom: 10
+    }
+  }, err), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginBottom: 10
+    }
+  }, "\u041F\u043E\u0441\u043B\u0435 \u0441\u043C\u0435\u043D\u044B \u043F\u0430\u0440\u043E\u043B\u044F \u0432\u0445\u043E\u0434 \u043D\u0430 \u0434\u0440\u0443\u0433\u0438\u0445 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430\u0445 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0441\u044F."), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: !f.oldPassword || !f.newPassword,
+    onClick: save
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"));
+}
+const LIVE_TABS = {
+  home: ["home", "Главная"],
+  sales: ["trending-up", "Продажи"],
+  stock: ["package", "Склад"],
+  clients: ["users", "Клиенты"],
+  sync: ["clock", "Интеграция 1С"],
+  users: ["shield-check", "Сотрудники"]
+};
+function LiveApp({
+  session,
+  setSession,
+  onExit
+}) {
+  const can = (...p) => liveCan(session, ...p);
+  const tabs = ["home"].concat(can("sales", "sales.own") ? ["sales"] : []).concat(can("stock") ? ["stock"] : []).concat(can("debts", "debts.own", "sales", "sales.own") ? ["clients"] : []).concat(can("sync") ? ["sync"] : []).concat(can("users") ? ["users"] : []);
+  const [tab, setTab] = useState("home");
+  const [period, setPeriod] = useState("month");
+  const [custom, setCustom] = useState({
+    from: stShift(stToday(), -13),
+    to: stToday()
+  });
+  const [toast, setToast] = useState(null);
+  const [pwd, setPwd] = useState(false);
+  const showToast = m => {
+    setToast(m);
+    setTimeout(() => setToast(null), 2200);
+  };
+  const range = stRange(period, custom);
+  const authLost = msg => onExit(msg || "Сессия завершена, войдите снова");
+  const go = t => tabs.includes(t) && setTab(t);
+  const p = {
+    session,
+    range,
+    authLost,
+    go,
+    showToast
+  };
+  const showPeriod = ["home", "sales", "clients"].includes(tab) && can("sales", "sales.own", "debts", "debts.own");
+  return React.createElement("div", {
+    className: "relative h-full flex flex-col kz-app",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "px-5 pb-2 flex items-center gap-2 kz-head"
+  }, React.createElement("div", {
+    className: "rounded-xl flex items-center justify-center shrink-0",
+    style: {
+      width: 32,
+      height: 32,
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement(Logo, {
+    size: 24
+  })), React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    className: "font-display truncate",
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800,
+      color: "var(--ink)"
+    }
+  }, LIVE_TABS[tab][1]), React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 10,
+      color: "var(--muted)"
+    }
+  }, session.user.name, " \xB7 ", LIVE_ROLES[session.user.role] || session.user.role)), React.createElement(LangSwitch, null), React.createElement("button", {
+    onClick: () => setPwd(true),
+    title: "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0430\u0440\u043E\u043B\u044C",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "settings",
+    size: 15
+  })), React.createElement("button", {
+    onClick: () => onExit(),
+    title: "\u0412\u044B\u0439\u0442\u0438",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#FCE7E6"
+    }
+  }, React.createElement(Ico, {
+    name: "log-out",
+    size: 15,
+    color: "var(--red)"
+  }))), React.createElement("div", {
+    className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
+  }, showPeriod && React.createElement(LivePeriodBar, {
+    period: period,
+    setPeriod: setPeriod,
+    custom: custom,
+    setCustom: setCustom
+  }), tab === "home" && React.createElement(LiveHome, p), tab === "sales" && React.createElement(LiveSales, p), tab === "stock" && React.createElement(LiveStock, p), tab === "clients" && React.createElement(LiveClients, p), tab === "sync" && React.createElement(LiveSync, p), tab === "users" && React.createElement(LiveUsers, p)), React.createElement(AppNav, {
+    items: tabs.map(id => ({
+      id,
+      icon: LIVE_TABS[id][0],
+      label: LIVE_TABS[id][1]
+    })),
+    active: tab,
+    onPick: go,
+    spread: tabs.length <= 4,
+    brand: React.createElement(NavBrand, {
+      title: "Sapar Trade",
+      sub: "\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0440\u0435\u0436\u0438\u043C \xB7 1\u0421"
+    })
+  }), pwd && React.createElement(LivePasswordModal, {
+    session: session,
+    onClose: () => setPwd(false),
+    onChanged: token => {
+      setSession({
+        ...session,
+        token
+      });
+      setPwd(false);
+      showToast("Пароль изменён");
+    }
+  }), React.createElement(Toast, {
+    toast: toast
+  }));
+}
 function App() {
-  const [view, setView] = useState("client");
+  const [liveSession, setLiveSessionState] = useState(() => stSession.get());
+  const setLiveSession = v => {
+    stSession.set(v);
+    setLiveSessionState(v);
+  };
+  const [liveNotice, setLiveNotice] = useState("");
+  const [view, setView] = useState(() => stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : "client");
   const [loggedAgent, setLoggedAgent] = useState(null);
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
@@ -11530,7 +12748,23 @@ function App() {
     onAdminTrigger: () => setView("staffChoice")
   }), view === "staffChoice" && React.createElement(StaffGate, {
     onCancel: () => setView("client"),
-    onPick: role => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : "agentLogin")
+    onPick: role => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : role === "live" ? "liveLogin" : "agentLogin")
+  }), view === "liveLogin" && React.createElement(LiveLogin, {
+    notice: liveNotice,
+    onCancel: () => setView("staffChoice"),
+    onSuccess: s => {
+      setLiveNotice("");
+      setLiveSession(s);
+      setView("live");
+    }
+  }), view === "live" && liveSession && React.createElement(LiveApp, {
+    session: liveSession,
+    setSession: setLiveSession,
+    onExit: msg => {
+      setLiveSession(null);
+      setLiveNotice(msg || "");
+      setView(msg ? "liveLogin" : "client");
+    }
   }), view === "mgmtLogin" && React.createElement(MgmtLogin, {
     addAudit: addAudit,
     onCancel: () => setView("staffChoice"),

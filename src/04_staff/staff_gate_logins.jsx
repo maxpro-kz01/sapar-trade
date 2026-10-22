@@ -19,6 +19,14 @@ function StaffGate({ onCancel, onPick }) {
           <h1 className="font-display text-center" style={{ fontSize: 19, fontWeight: 800, color: "var(--ink)" }}>Вход для сотрудников</h1>
           <p className="text-center" style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Выберите роль для входа</p>
         </div>
+        <button onClick={() => onPick("live")} className="rounded-2xl p-4 mb-3 flex items-center gap-3 press-98" style={{ border: "1.5px solid #127A33", background: "#E4F7EA" }}>
+          <div className="rounded-xl p-2.5" style={{ background: "#127A33" }}><Ico name="shield-check" size={18} color="#fff" /></div>
+          <div className="flex-1 text-left">
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Рабочий вход · данные 1С</p>
+            <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Личный логин и пароль сотрудника</p>
+          </div>
+          <Ico name="arrow-left" size={16} color="#127A33" style={{ transform: "rotate(180deg)" }} />
+        </button>
         <button onClick={() => onPick("admin")} className="rounded-2xl p-4 mb-3 flex items-center gap-3 press-98" style={{ border: "1.5px solid var(--line)", background: "#fff" }}>
           <div className="rounded-xl p-2.5" style={{ background: "#EEF0FF" }}><Ico name="shield-check" size={18} color="var(--navy)" /></div>
           <div className="flex-1 text-left">
