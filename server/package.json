@@ -1,0 +1,25 @@
+{
+  "name": "sapar-trade-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sapar Trade — сервер: приём данных 1С, вход сотрудников, отчёты с правами по ролям",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "migrate": "node src/db/migrate.js",
+    "user:create": "node scripts/create-user.js",
+    "test": "node --test test/*.test.js",
+    "dev:local": "node scripts/dev-local.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^17.2.0-beta.15"
+  }
+}

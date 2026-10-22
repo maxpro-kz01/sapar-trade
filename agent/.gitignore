@@ -1,0 +1,6 @@
+config.json
+secrets.dat
+state.json
+agent.lock
+logs/
+probe-*.txt

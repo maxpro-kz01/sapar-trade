@@ -1,0 +1,20 @@
+﻿{
+  "serverUrl": "https://sapar-trade-api.onrender.com",
+  "onec": {
+    "comProgId": "V83.COMConnector",
+    "server": "srv1c",
+    "base": "utp",
+    "user": "sapar_api"
+  },
+  "salesLookbackDays": 3,
+  "schedule": {
+    "stock": 5,
+    "prices": 5,
+    "sales": 5,
+    "cost": 5,
+    "debts": 5,
+    "products": 60,
+    "clients": 60,
+    "warehouses": 1440
+  }
+}
