@@ -1,0 +1,10 @@
+services:
+  - type: web
+    runtime: static
+    name: sapar-trade
+    buildCommand: echo "static prototype, no build"
+    staticPublishPath: ./public
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
