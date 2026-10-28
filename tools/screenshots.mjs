@@ -25,7 +25,7 @@ const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromi
 const errors = [];
 const report = [];
 
-async function newPage([w, h]) {
+async function newPage([w, h], hash = "") {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
@@ -36,7 +36,7 @@ async function newPage([w, h]) {
     if (url.startsWith("file:")) return route.continue();
     return route.fulfill({ status: 204, body: "" }); // шрифты, тайлы
   });
-  await page.goto(pathToFileURL(join(root, "public/index.html")).href);
+  await page.goto(pathToFileURL(join(root, "public/index.html")).href + hash);
   await page.waitForTimeout(400);
   return page;
 }
@@ -62,8 +62,11 @@ async function shot(page, size, name) {
 
 for (const size of only) {
   const vp = SIZES[size];
-  // Клиент
+  // Сотрудники (стартовый экран)
   let p = await newPage(vp);
+  await shot(p, size, "00_staff_gate");
+  // Клиент (по ссылке #client)
+  p = await newPage(vp, "#client");
   await shot(p, size, "01_login");
   await p.fill('input[placeholder="7XX XXX XX XX"]', "7011234567");
   await click(p, "Получить код");
@@ -75,7 +78,6 @@ for (const size of only) {
 
   // Админ
   p = await newPage(vp);
-  await dbl(p);
   await click(p, "Администратор");
   const ins = p.locator("input");
   await ins.nth(0).fill("admin"); await ins.nth(1).fill("admin");
@@ -86,7 +88,6 @@ for (const size of only) {
 
   // Система управления — владелец
   p = await newPage(vp);
-  await dbl(p);
   await click(p, "Система управления");
   await click(p, "Владелец (Owner)");
   await p.locator("input").first().fill("1234"); await click(p, "Войти");

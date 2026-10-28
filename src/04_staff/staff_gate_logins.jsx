@@ -9,7 +9,7 @@ function StaffGate({ onCancel, onPick }) {
       <StatusBar />
       <div className="flex flex-col h-full px-6 pt-4 font-body kz-narrow">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={onCancel} className="p-2 -ml-2 rounded-full"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
+          {onCancel ? <button onClick={onCancel} className="p-2 -ml-2 rounded-full"><Ico name="arrow-left" size={20} color="var(--ink)" /></button> : <span />}
           <LangSwitch />
         </div>
         <div className="flex flex-col items-center mb-8">
