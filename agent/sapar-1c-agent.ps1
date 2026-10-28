@@ -184,8 +184,13 @@ function Invoke-Server([string]$Method, [string]$Path, [string]$Json, [string]$A
 # Запятая перед вызовом — чтобы PowerShell не «разворачивал» коллекции 1С при возврате из функции.
 $BF = [Reflection.BindingFlags]
 function Com-Get($Obj, [string]$Name) { ,[__ComObject].InvokeMember($Name, $BF::GetProperty, $null, $Obj, $null) }
-function Com-Set($Obj, [string]$Name, $Value) { [void][__ComObject].InvokeMember($Name, $BF::SetProperty, $null, $Obj, @(,$Value)) }
-function Com-Call($Obj, [string]$Name, [object[]]$Arguments = @()) { ,[__ComObject].InvokeMember($Name, $BF::InvokeMethod, $null, $Obj, $Arguments) }
+function Com-Set($Obj, [string]$Name, $Value) { [void][__ComObject].InvokeMember($Name, $BF::SetProperty, $null, $Obj, @(,(Com-Unwrap $Value))) }
+# PowerShell оборачивает значения (например, Get-Date) в PSObject — в 1С надо передавать «чистое» значение
+function Com-Unwrap($v) { if ($v -is [Management.Automation.PSObject]) { $v.PSObject.BaseObject } else { $v } }
+function Com-Call($Obj, [string]$Name, [object[]]$Arguments = @()) {
+  $a = @(); foreach ($x in $Arguments) { $a += ,(Com-Unwrap $x) }
+  ,[__ComObject].InvokeMember($Name, $BF::InvokeMethod, $null, $Obj, [object[]]$a)
+}
 function Get-1CInfo($Conn) {
   $md = Com-Get $Conn 'Metadata'
   return @{ Name = (Com-Get $md 'Name'); Version = (Com-Get $md 'Version'); Synonym = (Com-Call $Conn 'String' @((Com-Get $md 'Synonym'))) }
@@ -227,7 +232,7 @@ function Invoke-1CQuery($Conn, [string]$Text, [hashtable]$Params) {
 }
 
 function Get-Params([string]$Entity, [datetime]$From, [datetime]$To) {
-  $p = @{ 'Сейчас' = (Get-Date) }
+  $p = @{ 'Сейчас' = [datetime]::Now }
   if ($Entity -in @('sales', 'cost')) { $p['Начало'] = $From.Date; $p['Конец'] = $To.Date.AddDays(1).AddSeconds(-1) }
   return $p
 }
