@@ -327,6 +327,9 @@ function Invoke-Backfill($Conn, [string]$AgentKey, [int]$Days) {
 }
 
 # ---------- запуск ----------
+# при запуске через -File список приходит одной строкой «a,b,c»
+$Only = @($Only | ForEach-Object { $_ -split '[,; ]+' } | Where-Object { $_ })
+
 if ($SetSecrets) { Save-Secrets; return }
 
 # не запускать два цикла одновременно (если прошлый ещё идёт)
