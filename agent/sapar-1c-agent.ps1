@@ -44,7 +44,7 @@ if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
-$AgentVersion = '1.0.0'
+$AgentVersion = '1.1.0'
 
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
@@ -273,7 +273,14 @@ function Invoke-Probe($Conn) {
     @('Catalogs', 'Номенклатура'), @('Catalogs', 'Склады'), @('Catalogs', 'Контрагенты'), @('Catalogs', 'ДоговорыКонтрагентов'), @('Catalogs', 'ТипыЦенНоменклатуры'),
     @('InformationRegisters', 'ЦеныНоменклатуры'), @('InformationRegisters', 'КонтактнаяИнформация'),
     @('AccumulationRegisters', 'ТоварыНаСкладах'), @('AccumulationRegisters', 'ТоварыВРознице'), @('AccumulationRegisters', 'Продажи'),
-    @('AccumulationRegisters', 'ПродажиСебестоимость'), @('AccumulationRegisters', 'ВзаиморасчетыСКонтрагентами')
+    @('AccumulationRegisters', 'ПродажиСебестоимость'), @('AccumulationRegisters', 'ВзаиморасчетыСКонтрагентами'),
+    # деньги и расходы (этап B)
+    @('AccumulationRegisters', 'ДенежныеСредства'), @('AccumulationRegisters', 'ДвиженияДенежныхСредств'),
+    @('AccumulationRegisters', 'Затраты'), @('AccumulationRegisters', 'ПрочиеДоходыИРасходы'), @('AccumulationRegisters', 'ЗаказыПокупателей'),
+    @('Catalogs', 'Организации'), @('Catalogs', 'СтатьиДвиженияДенежныхСредств'), @('Catalogs', 'СтатьиЗатрат'), @('Catalogs', 'ПрочиеДоходыИРасходы'),
+    @('Catalogs', 'Кассы'), @('Catalogs', 'БанковскиеСчета'), @('Catalogs', 'Пользователи'),
+    # заказы из приложения (этап C)
+    @('Documents', 'ЗаказПокупателя'), @('Documents', 'РеализацияТоваровУслуг')
   )
   foreach ($o in $objs) {
     [void]$lines.Add(''); [void]$lines.Add("=== $($o[0]).$($o[1])")
@@ -288,6 +295,25 @@ function Invoke-Probe($Conn) {
           [void]$lines.Add("  ${part}: " + ($names -join ', '))
         } catch { }
       }
+      # табличные части документов и справочников с их колонками
+      try {
+        $tss = Com-Get $md 'TabularSections'
+        $tc = [int](Com-Call $tss 'Count')
+        for ($t = 0; $t -lt $tc; $t++) {
+          $ts = Com-Call $tss 'Get' @($t)
+          $ta = Com-Get $ts 'Attributes'; $ac = [int](Com-Call $ta 'Count')
+          $names = @(); for ($i = 0; $i -lt $ac; $i++) { $names += [string](Com-Get (Com-Call $ta 'Get' @($i)) 'Name') }
+          [void]$lines.Add("  ТЧ $(Com-Get $ts 'Name'): " + ($names -join ', '))
+        }
+      } catch { }
+    } catch { [void]$lines.Add("  ошибка: $($_.Exception.Message)") }
+  }
+  # полный список регистров и документов базы — чтобы найти, где лежат деньги и расходы
+  foreach ($kind in @('AccumulationRegisters', 'Documents')) {
+    try {
+      $coll = Com-Get $meta $kind; $cnt = [int](Com-Call $coll 'Count')
+      $names = @(); for ($i = 0; $i -lt $cnt; $i++) { $names += [string](Com-Get (Com-Call $coll 'Get' @($i)) 'Name') }
+      [void]$lines.Add(''); [void]$lines.Add("=== Все $kind ($cnt)"); [void]$lines.Add('  ' + ($names -join ', '))
     } catch { [void]$lines.Add("  ошибка: $($_.Exception.Message)") }
   }
   try {
@@ -306,6 +332,23 @@ function Invoke-Probe($Conn) {
       $cnt = Invoke-1CQuery $Conn ("ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК n ИЗ (" + ((Get-QueryText $e) -replace '(?m)^\s*//.*$', '') + ") КАК X") (Get-Params $e $from $to)
       [void]$lines.Add("  всего строк: $($cnt.Rows[0][0])")
     } catch { [void]$lines.Add("  ОШИБКА: $($_.Exception.Message)") }
+  }
+  # дополнительные диагностические запросы разработчика (queries\probe\*.1c), выполняются как есть
+  $extra = Join-Path (Join-Path $Root 'queries') 'probe'
+  if (Test-Path $extra) {
+    foreach ($f in (Get-ChildItem $extra -Filter '*.1c' | Sort-Object Name)) {
+      [void]$lines.Add(''); [void]$lines.Add("=== Диагностика $($f.BaseName)")
+      try {
+        $r = Invoke-1CQuery $Conn (Get-Content $f.FullName -Raw -Encoding UTF8) (Get-Params 'sales' $from $to)
+        [void]$lines.Add('  ' + ($r.Columns -join ' | '))
+        $k = 0
+        foreach ($row in $r.Rows) {
+          if (++$k -gt 15) { [void]$lines.Add("  … всего строк: $($r.Rows.Count)"); break }
+          [void]$lines.Add('  ' + (($row | ForEach-Object { if ($_ -is [datetime]) { $_.ToString('yyyy-MM-dd HH:mm') } else { ("$_" -replace '\s+', ' ') } }) -join ' | '))
+        }
+        if (-not $r.Rows.Count) { [void]$lines.Add('  (нет строк)') }
+      } catch { [void]$lines.Add("  ОШИБКА: $($_.Exception.Message)") }
+    }
   }
   $lines | Set-Content -Path $out -Encoding UTF8
   Write-Host "Готово: $out — отправьте этот файл разработчику." -ForegroundColor Green
