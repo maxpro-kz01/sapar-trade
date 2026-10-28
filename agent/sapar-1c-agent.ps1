@@ -60,11 +60,13 @@ function Write-Log([string]$Level, [string]$Msg) {
 
 # ---------- секреты (DPAPI: расшифровать может только тот же пользователь Windows на этом компьютере) ----------
 function Save-Secrets {
-  $p1 = Read-Host 'Пароль пользователя 1С' -AsSecureString
-  $p2 = Read-Host 'Ключ агента (AGENT_KEY с сервера)' -AsSecureString
-  @{ onecPassword = (ConvertFrom-SecureString $p1); agentKey = (ConvertFrom-SecureString $p2) } |
+  $p1 = Read-Host 'Пароль пользователя 1С (sapar_api)' -AsSecureString
+  $p2 = Read-Host 'Ключ агента от разработчика (если ещё нет — просто Enter)' -AsSecureString
+  $key = $null
+  if ($p2.Length -gt 0) { $key = ConvertFrom-SecureString $p2 }
+  @{ onecPassword = (ConvertFrom-SecureString $p1); agentKey = $key } |
     ConvertTo-Json | Set-Content -Path $SecretsPath -Encoding UTF8
-  Write-Host "Сохранено в $SecretsPath (только для пользователя $env:USERNAME)." -ForegroundColor Green
+  Write-Host "Сохранено в $SecretsPath (расшифровать может только пользователь $env:USERNAME на этом компьютере)." -ForegroundColor Green
 }
 function Get-Plain([string]$enc) {
   $ss = ConvertTo-SecureString $enc
@@ -74,7 +76,9 @@ function Get-Plain([string]$enc) {
 function Read-Secrets {
   if (-not (Test-Path $SecretsPath)) { throw 'Секреты не заданы. Запустите с ключом -SetSecrets под тем же пользователем, что и задание планировщика.' }
   $s = Get-Content $SecretsPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  return @{ OnecPassword = (Get-Plain $s.onecPassword); AgentKey = (Get-Plain $s.agentKey) }
+  $key = $null
+  if ($s.agentKey) { $key = Get-Plain $s.agentKey }
+  return @{ OnecPassword = (Get-Plain $s.onecPassword); AgentKey = $key }
 }
 
 # ---------- JSON (свой быстрый сериализатор: числа всегда с точкой, даты ГГГГ-ММ-ДД) ----------
@@ -312,8 +316,10 @@ try {
   $sec = Read-Secrets
 
   if ($Test) {
-    $ping = Invoke-Server 'GET' '/api/sync/1c/ping' $null $sec.AgentKey
-    Write-Host "Сервер: OK, время сервера $($ping.serverTime)" -ForegroundColor Green
+    if ($sec.AgentKey) {
+      $ping = Invoke-Server 'GET' '/api/sync/1c/ping' $null $sec.AgentKey
+      Write-Host "Сервер: OK, время сервера $($ping.serverTime)" -ForegroundColor Green
+    } else { Write-Host 'Сервер: пропущено (ключ агента ещё не задан)' -ForegroundColor Yellow }
     $conn = Connect-1C $sec.OnecPassword
     Write-Host "1С: OK, конфигурация $($conn.Metadata.Synonym) $($conn.Metadata.Version)" -ForegroundColor Green
     return
@@ -321,6 +327,7 @@ try {
 
   $conn = Connect-1C $sec.OnecPassword
   if ($Probe) { Invoke-Probe $conn; return }
+  if (-not $sec.AgentKey) { throw 'Ключ агента не задан. Получите его у разработчика и выполните -SetSecrets ещё раз.' }
   if ($Backfill -gt 0) { Invoke-Backfill $conn $sec.AgentKey $Backfill; return }
 
   $state = Read-State
