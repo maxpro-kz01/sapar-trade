@@ -3,6 +3,8 @@ import { Router } from "express";
 import { ah, period } from "../lib/http.js";
 import { requireAuth } from "../middleware/auth.js";
 import * as rep from "../services/reports.js";
+import { clients } from "../services/clients.js";
+import { stock } from "../services/stock.js";
 import { audit } from "../services/audit.js";
 
 const r = Router();
@@ -19,11 +21,11 @@ r.get("/sales", ah(async (req, res) => {
 }));
 
 r.get("/stock", ah(async (req, res) => {
-  res.json(await rep.stock(req.user, { warehouse: req.query.warehouse, search: req.query.q, onlyLow: flag(req.query.low), limit: req.query.limit }));
+  res.json(await stock(req.user, { warehouse: req.query.warehouse, search: req.query.q, onlyLow: flag(req.query.low), dead: req.query.dead, limit: req.query.limit }));
 }));
 
 r.get("/clients", ah(async (req, res) => {
-  res.json(await rep.clients(req.user, { ...period(req.query), search: req.query.q, onlyDebtors: flag(req.query.debtors), limit: req.query.limit }));
+  res.json(await clients(req.user, { ...period(req.query), search: req.query.q, onlyDebtors: flag(req.query.debtors), sleeping: req.query.sleeping, manager: req.query.manager, limit: req.query.limit }));
 }));
 
 // Отметка в журнале при выгрузке (экспорт делает браузер из уже полученных данных)

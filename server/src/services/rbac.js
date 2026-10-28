@@ -7,11 +7,13 @@
 //  debts / debts.own — дебиторка всех / своих клиентов
 //  sync       — статус и журнал интеграции; users — управление пользователями; audit — журнал действий
 
+//  team / team.own — рейтинг ТП всех / своей команды; plans.edit — ввод плана продаж
+//  Задачи доступны всем ролям (видят свои; владелец и директор — все).
 export const ROLE_PERMS = {
-  owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit"],
-  director:   ["sales", "margin", "stock", "debts", "sync"],
-  supervisor: ["sales.own", "debts.own"],
-  tp:         ["sales.own", "debts.own"],
+  owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all"],
+  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all"],
+  supervisor: ["sales.own", "debts.own", "team.own"],
+  tp:         ["sales.own", "debts.own", "team.own"],
   accountant: ["sales", "debts", "sync"],
   financier:  ["sales", "debts"],
   warehouse:  ["stock"],
@@ -24,7 +26,7 @@ export const ROLES = Object.keys(ROLE_PERMS);
 export const can = (user, perm) => (ROLE_PERMS[user.role] || []).includes(perm);
 
 // Видит ли пользователь продажи/долги: "all" | "own" | null
-export function scopeOf(user, kind /* "sales" | "debts" */) {
+export function scopeOf(user, kind /* "sales" | "debts" | "team" */) {
   if (can(user, kind)) return "all";
   if (can(user, kind + ".own")) return "own";
   return null;

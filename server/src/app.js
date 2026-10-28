@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
 import syncRoutes from "./routes/sync.js";
 import reportRoutes from "./routes/reports.js";
+import mgmtRoutes from "./routes/mgmt.js";
 
 export function createApp() {
   const app = express();
@@ -16,7 +17,7 @@ export function createApp() {
     res.set({ "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
     next();
   });
-  app.use("/api", cors({ origin: config.corsOrigins, allowedHeaders: ["Content-Type", "Authorization"], maxAge: 600 }));
+  app.use("/api", cors({ origin: config.corsOrigins, allowedHeaders: ["Content-Type", "Authorization"], methods: ["GET", "POST", "PUT", "PATCH"], maxAge: 600 }));
   // агенту 1С нужны большие пакеты, остальным — маленькие
   app.use("/api/sync/1c", express.json({ limit: "25mb" }));
   app.use(express.json({ limit: "200kb" }));
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/api/users", userRoutes);
   app.use("/api/sync", syncRoutes);
   app.use("/api", reportRoutes);
+  app.use("/api", mgmtRoutes);
 
   app.use("/api", (req, res) => res.status(404).json({ error: "Не найдено" }));
 
