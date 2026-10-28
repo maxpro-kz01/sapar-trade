@@ -33,11 +33,15 @@ param(
   [switch]$Probe,
   [int]$Backfill = 0,
   [string[]]$Only = @(),
-  [string]$ConfigPath = (Join-Path $PSScriptRoot 'config.json')
+  [string]$ConfigPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
+# Папка скрипта (в Windows PowerShell 5.1 $PSScriptRoot пуст в блоке param, поэтому вычисляем здесь)
+$Root = $PSScriptRoot
+if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
 $AgentVersion = '1.0.0'
@@ -45,7 +49,6 @@ $AgentVersion = '1.0.0'
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
 $Cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$Root = $PSScriptRoot
 $LogDir = Join-Path $Root 'logs'
 $StatePath = Join-Path $Root 'state.json'
 $SecretsPath = Join-Path $Root 'secrets.dat'
