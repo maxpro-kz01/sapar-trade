@@ -1951,7 +1951,9 @@ const KK_DICT = {
   "Данные могут быть устаревшими": "Деректер ескірген болуы мүмкін",
   "Последнее обновление": "Соңғы жаңарту",
   "Демо-данные": "Демо-деректер",
-  "подключение к 1С и Sales Doctor через Backend API": "1С және Sales Doctor-ға Backend API арқылы қосылу",
+  "реальные цифры из 1С — в разделе «Рабочий вход»": "1С-тің нақты сандары — «Жұмыс кірісі» бөлімінде",
+  "1С: Управление торговым предприятием": "1С: Сауда кәсіпорнын басқару",
+  "Товары, цены, остатки, продажи, себестоимость, дебиторка": "Тауарлар, бағалар, қалдықтар, сатылымдар, өзіндік құн, дебиторлық берешек",
   "Факт продаж": "Сату фактісі",
   "Выполнение": "Орындалуы",
   "Остаток до плана": "Жоспарға дейін қалғаны",
@@ -11033,10 +11035,9 @@ function MgSystem({
       setSync(s => ({
         ...s,
         c1: ok ? t : s.c1,
-        sd: ok ? t : s.sd,
         log: [{
           t,
-          src: "1С + Sales Doctor",
+          src: "1С",
           ok
         }, ...s.log].slice(0, 30)
       }));
@@ -11058,7 +11059,7 @@ function MgSystem({
     downloadCsv("sapar-trade-" + new Date().toISOString().slice(0, 10) + ".csv", out);
     addAudit(R.person, "Экспорт отчёта", "Excel (CSV)", "период " + dmy(rg.from) + " — " + dmy(rg.to));
   };
-  return React.createElement("div", null, React.createElement(MgLabel, null, "\u0418\u043D\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438"), [["1С: Бухгалтерия", "c1", "Финансы, себестоимость, остатки, реализация, дебиторка"], ["Sales Doctor", "sd", "ТП, визиты, GPS, маршруты, заказы"]].map(([name, k, desc]) => React.createElement(MgCard, {
+  return React.createElement("div", null, React.createElement(MgLabel, null, "\u0418\u043D\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438"), [["1С: Управление торговым предприятием", "c1", "Товары, цены, остатки, продажи, себестоимость, дебиторка"]].map(([name, k, desc]) => React.createElement(MgCard, {
     key: k
   }, React.createElement("div", {
     className: "flex justify-between items-center"
@@ -11242,7 +11243,7 @@ function MgmtApp({
   const cur = useMemo(() => mgAgg(rg.from, rg.to, scope), [rg.from.getTime(), rg.to.getTime(), role]);
   const prev = useMemo(() => mgAgg(rg.pf, rg.pt, scope), [rg.pf.getTime(), rg.pt.getTime(), role]);
   const problems = mgProblems(role, warehouse);
-  const stale = mgSync.fail || Date.now() - new Date(mgSync.sd).getTime() > 15 * 60000;
+  const stale = mgSync.fail || Date.now() - new Date(mgSync.c1).getTime() > 15 * 60000;
   const go = t => {
     setTpOpen(null);
     if (R.tabs.includes(t)) setTab(t);
@@ -11342,7 +11343,7 @@ function MgmtApp({
       fontWeight: 600,
       flex: 1
     }
-  }, "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0438\u043C\u0438. \u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435: ", dt(new Date(mgSync.sd)))), React.createElement("div", {
+  }, "\u0414\u0430\u043D\u043D\u044B\u0435 \u043C\u043E\u0433\u0443\u0442 \u0431\u044B\u0442\u044C \u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0438\u043C\u0438. \u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435: ", dt(new Date(mgSync.c1)))), React.createElement("div", {
     className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
   }, tpOpen ? React.createElement(React.Fragment, null, React.createElement("button", {
     onClick: () => setTpOpen(null),
@@ -11377,7 +11378,7 @@ function MgmtApp({
       color: "var(--muted)",
       marginTop: 14
     }
-  }, "\u0414\u0435\u043C\u043E-\u0434\u0430\u043D\u043D\u044B\u0435 \xB7 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435 \u043A 1\u0421 \u0438 Sales Doctor \u0447\u0435\u0440\u0435\u0437 Backend API"))), React.createElement(AppNav, {
+  }, "\u0414\u0435\u043C\u043E-\u0434\u0430\u043D\u043D\u044B\u0435 \xB7 \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0435 \u0446\u0438\u0444\u0440\u044B \u0438\u0437 1\u0421 \u2014 \u0432 \u0440\u0430\u0437\u0434\u0435\u043B\u0435 \xAB\u0420\u0430\u0431\u043E\u0447\u0438\u0439 \u0432\u0445\u043E\u0434\xBB"))), React.createElement(AppNav, {
     items: R.tabs.map(id => ({
       id,
       icon: MG_TABS[id][0],
@@ -12622,13 +12623,8 @@ function App() {
   const [mgWeights, setMgWeights] = useState(DEFAULT_WEIGHTS);
   const [mgSync, setMgSync] = useState({
     c1: new Date(Date.now() - 4 * 60000),
-    sd: new Date(Date.now() - 2 * 60000),
     fail: false,
     log: [{
-      t: new Date(Date.now() - 2 * 60000),
-      src: "Sales Doctor",
-      ok: true
-    }, {
       t: new Date(Date.now() - 4 * 60000),
       src: "1С",
       ok: true

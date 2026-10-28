@@ -16,7 +16,7 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
   const cur = useMemo(() => mgAgg(rg.from, rg.to, scope), [rg.from.getTime(), rg.to.getTime(), role]);
   const prev = useMemo(() => mgAgg(rg.pf, rg.pt, scope), [rg.pf.getTime(), rg.pt.getTime(), role]);
   const problems = mgProblems(role, warehouse);
-  const stale = mgSync.fail || Date.now() - new Date(mgSync.sd).getTime() > 15 * 60000;
+  const stale = mgSync.fail || Date.now() - new Date(mgSync.c1).getTime() > 15 * 60000;
   const go = (t) => { setTpOpen(null); if (R.tabs.includes(t)) setTab(t); };
   const showPeriod = ["home", "sales", "finance"].includes(tab) && ["owner", "director", "accountant", "financier"].includes(role);
   const p = { role, cur, prev, rg, go, warehouse, problems, weights: mgWeights, addAudit, showToast, openTp: (id) => setTpOpen(id) };
@@ -40,7 +40,7 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
       {stale && (
         <div className="rounded-xl px-3 py-2 flex items-center gap-2 kz-stale" style={{ background: "#FCE7E6", margin: "0 20px 8px" }}>
           <Ico name="clock" size={14} color="#B3261E" />
-          <span style={{ fontSize: 11, color: "#B3261E", fontWeight: 600, flex: 1 }}>Данные могут быть устаревшими. Последнее обновление: {dt(new Date(mgSync.sd))}</span>
+          <span style={{ fontSize: 11, color: "#B3261E", fontWeight: 600, flex: 1 }}>Данные могут быть устаревшими. Последнее обновление: {dt(new Date(mgSync.c1))}</span>
         </div>
       )}
       <div className="flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main">
@@ -63,7 +63,7 @@ function MgmtApp({ role, shared, onExit, lang, setLang }) {
             {tab === "tasks" && <MgTasks {...p} tasks={mgTasks} setTasks={setMgTasks} />}
             {tab === "ai" && <MgAI {...p} />}
             {tab === "system" && <MgSystem {...p} sync={mgSync} setSync={setMgSync} setWeights={setMgWeights} auditLog={auditLog} />}
-            <p className="text-center" style={{ fontSize: 10, color: "var(--muted)", marginTop: 14 }}>Демо-данные · подключение к 1С и Sales Doctor через Backend API</p>
+            <p className="text-center" style={{ fontSize: 10, color: "var(--muted)", marginTop: 14 }}>Демо-данные · реальные цифры из 1С — в разделе «Рабочий вход»</p>
           </>
         )}
       </div>

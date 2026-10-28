@@ -182,7 +182,7 @@ function MgSystem({ role, sync, setSync, weights, setWeights, auditLog, addAudit
     setBusy(true);
     setTimeout(() => {
       const ok = !sync.fail; const t = new Date();
-      setSync((s) => ({ ...s, c1: ok ? t : s.c1, sd: ok ? t : s.sd, log: [{ t, src: "1С + Sales Doctor", ok }, ...s.log].slice(0, 30) }));
+      setSync((s) => ({ ...s, c1: ok ? t : s.c1, log: [{ t, src: "1С", ok }, ...s.log].slice(0, 30) }));
       addAudit(R.person, "Ручное обновление данных", "Интеграции", ok ? "успешно" : "ошибка");
       showToast(ok ? "Данные обновлены ✓" : "Ошибка синхронизации");
       setBusy(false);
@@ -200,7 +200,7 @@ function MgSystem({ role, sync, setSync, weights, setWeights, auditLog, addAudit
   return (
     <div>
       <MgLabel>Интеграции</MgLabel>
-      {[["1С: Бухгалтерия", "c1", "Финансы, себестоимость, остатки, реализация, дебиторка"], ["Sales Doctor", "sd", "ТП, визиты, GPS, маршруты, заказы"]].map(([name, k, desc]) => (
+      {[["1С: Управление торговым предприятием", "c1", "Товары, цены, остатки, продажи, себестоимость, дебиторка"]].map(([name, k, desc]) => (
         <MgCard key={k}>
           <div className="flex justify-between items-center">
             <span style={{ fontSize: 13, fontWeight: 800 }}>{name}</span>

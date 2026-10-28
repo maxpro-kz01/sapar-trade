@@ -24,8 +24,8 @@ function App() {
     { id: "T2", title: "Провести инвентаризацию напитков", who: "Дамир — завсклад", by: "Сапар — владелец", deadline: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10), prio: "Средний", status: "Новая", comments: [] },
   ]);
   const [mgWeights, setMgWeights] = useState(DEFAULT_WEIGHTS);
-  const [mgSync, setMgSync] = useState({ c1: new Date(Date.now() - 4 * 60000), sd: new Date(Date.now() - 2 * 60000), fail: false, log: [
-    { t: new Date(Date.now() - 2 * 60000), src: "Sales Doctor", ok: true }, { t: new Date(Date.now() - 4 * 60000), src: "1С", ok: true }] });
+  const [mgSync, setMgSync] = useState({ c1: new Date(Date.now() - 4 * 60000), fail: false, log: [
+    { t: new Date(Date.now() - 4 * 60000), src: "1С", ok: true }] });
 
   const [profile, setProfile] = useState({ name: "", hasShop: false, shopName: "" });
   const [cart, setCart] = useState({});
