@@ -179,6 +179,18 @@ function Invoke-Server([string]$Method, [string]$Path, [string]$Json, [string]$A
 }
 
 # ---------- 1С ----------
+# Объекты 1С по COM не публикуют описание типов, поэтому PowerShell не видит их свойства и методы напрямую.
+# Обращаемся через IDispatch (InvokeMember) — так работает с любой версией PowerShell.
+# Запятая перед вызовом — чтобы PowerShell не «разворачивал» коллекции 1С при возврате из функции.
+$BF = [Reflection.BindingFlags]
+function Com-Get($Obj, [string]$Name) { ,[__ComObject].InvokeMember($Name, $BF::GetProperty, $null, $Obj, $null) }
+function Com-Set($Obj, [string]$Name, $Value) { [void][__ComObject].InvokeMember($Name, $BF::SetProperty, $null, $Obj, @(,$Value)) }
+function Com-Call($Obj, [string]$Name, [object[]]$Arguments = @()) { ,[__ComObject].InvokeMember($Name, $BF::InvokeMethod, $null, $Obj, $Arguments) }
+function Get-1CInfo($Conn) {
+  $md = Com-Get $Conn 'Metadata'
+  return @{ Name = (Com-Get $md 'Name'); Version = (Com-Get $md 'Version'); Synonym = (Com-Call $Conn 'String' @((Com-Get $md 'Synonym'))) }
+}
+
 function Connect-1C([string]$Password) {
   $connector = New-Object -ComObject $Cfg.onec.comProgId
   $cs = 'Srvr="{0}";Ref="{1}";Usr="{2}";Pwd="{3}";' -f $Cfg.onec.server, $Cfg.onec.base, $Cfg.onec.user, ($Password -replace '"', '""')
@@ -193,19 +205,20 @@ function Get-QueryText([string]$Entity) {
 
 # Выполнить запрос 1С → @{ Columns; Rows } (значения — примитивы: строка, число, дата, булево)
 function Invoke-1CQuery($Conn, [string]$Text, [hashtable]$Params) {
-  $q = $Conn.NewObject('Query')
-  $q.Text = $Text
-  foreach ($k in $Params.Keys) { $q.SetParameter($k, $Params[$k]) }
-  $res = $q.Execute()
-  $n = $res.Columns.Count
-  $cols = @(); for ($i = 0; $i -lt $n; $i++) { $cols += $res.Columns.Get($i).Name }
+  $q = Com-Call $Conn 'NewObject' @('Query')
+  Com-Set $q 'Text' $Text
+  foreach ($k in $Params.Keys) { [void](Com-Call $q 'SetParameter' @($k, $Params[$k])) }
+  $res = Com-Call $q 'Execute'
+  $colsObj = Com-Get $res 'Columns'
+  $n = [int](Com-Call $colsObj 'Count')
+  $cols = @(); for ($i = 0; $i -lt $n; $i++) { $cols += [string](Com-Get (Com-Call $colsObj 'Get' @($i)) 'Name') }
   $rows = New-Object Collections.ArrayList
-  $sel = $res.Select()
-  while ($sel.Next()) {
+  $sel = Com-Call $res 'Select'
+  while (Com-Call $sel 'Next') {
     $row = New-Object object[] $n
     for ($i = 0; $i -lt $n; $i++) {
-      $v = $sel.Get($i)
-      if ($null -ne $v -and $v -is [__ComObject]) { $v = $Conn.String($v) }   # ссылка/перечисление → представление
+      $v = Com-Call $sel 'Get' @($i)
+      if ($null -ne $v -and $v -is [__ComObject]) { $v = Com-Call $Conn 'String' @($v) }   # ссылка/перечисление → представление
       $row[$i] = $v
     }
     [void]$rows.Add($row)
@@ -248,7 +261,9 @@ function Invoke-Probe($Conn) {
   $out = Join-Path $Root ('probe-{0}.txt' -f (Get-Date).ToString('yyyyMMdd-HHmm'))
   $lines = New-Object Collections.ArrayList
   [void]$lines.Add("Sapar Trade — диагностика 1С, $(Get-Date), агент $AgentVersion")
-  [void]$lines.Add("Конфигурация: $($Conn.Metadata.Name) $($Conn.Metadata.Version)  Синоним: $($Conn.Metadata.Synonym)")
+  $info = Get-1CInfo $Conn
+  [void]$lines.Add("Конфигурация: $($info.Name) $($info.Version)  Синоним: $($info.Synonym)")
+  $meta = Com-Get $Conn 'Metadata'
   $objs = @(
     @('Catalogs', 'Номенклатура'), @('Catalogs', 'Склады'), @('Catalogs', 'Контрагенты'), @('Catalogs', 'ДоговорыКонтрагентов'), @('Catalogs', 'ТипыЦенНоменклатуры'),
     @('InformationRegisters', 'ЦеныНоменклатуры'), @('InformationRegisters', 'КонтактнаяИнформация'),
@@ -258,12 +273,13 @@ function Invoke-Probe($Conn) {
   foreach ($o in $objs) {
     [void]$lines.Add(''); [void]$lines.Add("=== $($o[0]).$($o[1])")
     try {
-      $md = $Conn.Metadata.($o[0]).Find($o[1])
+      $md = Com-Call (Com-Get $meta $o[0]) 'Find' @($o[1])
       if ($null -eq $md) { [void]$lines.Add('  НЕТ в конфигурации'); continue }
       foreach ($part in @('Dimensions', 'Resources', 'Attributes')) {
         try {
-          $coll = $md.$part
-          $names = @(); for ($i = 0; $i -lt $coll.Count(); $i++) { $names += $coll.Get($i).Name }
+          $coll = Com-Get $md $part
+          $cnt = [int](Com-Call $coll 'Count')
+          $names = @(); for ($i = 0; $i -lt $cnt; $i++) { $names += [string](Com-Get (Com-Call $coll 'Get' @($i)) 'Name') }
           [void]$lines.Add("  ${part}: " + ($names -join ', '))
         } catch { }
       }
@@ -324,7 +340,8 @@ try {
       Write-Host "Сервер: OK, время сервера $($ping.serverTime)" -ForegroundColor Green
     } else { Write-Host 'Сервер: пропущено (ключ агента ещё не задан)' -ForegroundColor Yellow }
     $conn = Connect-1C $sec.OnecPassword
-    Write-Host "1С: OK, конфигурация $($conn.Metadata.Synonym) $($conn.Metadata.Version)" -ForegroundColor Green
+    $info = Get-1CInfo $conn
+    Write-Host "1С: OK, конфигурация $($info.Synonym) $($info.Version)" -ForegroundColor Green
     return
   }
 
