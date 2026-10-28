@@ -1,4 +1,4 @@
-// Проверка рабочего режима (данные 1С) в браузере: вход разными ролями, все вкладки, телефон и компьютер.
+// Проверка «Системы управления» (данные 1С) в браузере: вход разными ролями, все вкладки, телефон и компьютер.
 // Нужен локальный сервер: cd server && npm run dev:local && node scripts/seed-local.js
 // Сайт собрать с локальным API: ST_API_URL=http://127.0.0.1:3999 node build.mjs
 // Запуск: node tools/live-shots.mjs [папка]
@@ -14,8 +14,6 @@ mkdirSync(out, { recursive: true });
 const local = {
   "react.production.min.js": "node_modules/react/umd/react.production.min.js",
   "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js",
-  "leaflet.min.js": "node_modules/leaflet/dist/leaflet.js",
-  "leaflet.min.css": "node_modules/leaflet/dist/leaflet.css",
 };
 const site = createServer((req, res) => { res.setHeader("content-type", "text/html; charset=utf-8"); res.end(readFileSync(join(root, "public/index.html"))); });
 await new Promise((ok) => site.listen(8080, "127.0.0.1", ok));
@@ -29,14 +27,16 @@ async function open(vp) {
   const ctx = await browser.newContext({ viewport: { width: vp[0], height: vp[1] } });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
+  page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push("console: " + m.text().slice(0, 200)); });
   await page.route("**/*", (route) => {
     const url = route.request().url();
     const hit = Object.keys(local).find((k) => url.endsWith(k));
-    if (hit) return route.fulfill({ body: readFileSync(join(root, local[hit])), contentType: hit.endsWith(".css") ? "text/css" : "application/javascript" });
+    if (hit) return route.fulfill({ body: readFileSync(join(root, local[hit])), contentType: "application/javascript" });
     if (url.startsWith("http://127.0.0.1")) return route.continue();
     return route.fulfill({ status: 204, body: "" });
   });
-  await page.goto("http://127.0.0.1:8080/#work");
+  await page.goto("http://127.0.0.1:8080/");
+  await page.getByText("Система управления", { exact: true }).click();
   return page;
 }
 async function login(page, l, p) {
@@ -44,77 +44,114 @@ async function login(page, l, p) {
   await page.getByLabel("Пароль").fill(p);
   await page.getByRole("button", { name: "Войти" }).click();
   await page.waitForSelector(".kz-nav");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(700);
 }
 const overflow = (page) => page.evaluate(() => {
   const vw = document.documentElement.clientWidth;
   return [...document.querySelectorAll("#root *")].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > vw + 2 && !e.closest(".overflow-x-auto, .kz-nav"); }).length;
 });
-const tab = async (page, name) => { await page.locator(".kz-nav-item", { hasText: name }).click(); await page.waitForTimeout(500); };
+const tab = async (page, name) => { await page.locator(".kz-nav-item", { hasText: name }).first().click(); await page.waitForTimeout(700); };
 const text = (page) => page.locator(".kz-main").innerText();
+const navs = (page) => page.locator(".kz-nav-item .kz-nav-label").allInnerTexts();
+
+const OWNER_TABS = ["Главная", "Продажи", "Команда", "Экспедиторы", "Клиенты", "Склад", "Финансы", "Проблемы", "Задачи", "AI", "Система"];
 
 for (const [size, vp] of [["phone", [375, 812]], ["desktop", [1366, 800]]]) {
   const page = await open(vp);
-  // неверный пароль
   await page.getByLabel("Логин").fill("owner"); await page.getByLabel("Пароль").fill("wrong-pass1");
-  await page.getByRole("button", { name: "Войти" }).click(); await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "Войти" }).click(); await page.waitForTimeout(500);
   check((await page.locator("text=Неверный логин или пароль").count()) === 1, `${size}: неверный пароль → сообщение`);
   await page.screenshot({ path: join(out, `${size}_00_login.png`) });
   await login(page, "owner", "Owner12345");
-  for (const [i, t] of ["Главная", "Продажи", "Склад", "Клиенты", "Интеграция 1С", "Сотрудники"].entries()) {
+  check((await navs(page)).join(",") === OWNER_TABS.join(","), `${size}: вкладки владельца`);
+  for (const [i, t] of OWNER_TABS.entries()) {
     await tab(page, t);
     const ov = await overflow(page);
-    check(ov === 0, `${size} владелец «${t}»: без горизонтальной прокрутки (${ov})`);
-    await page.screenshot({ path: join(out, `${size}_0${i + 1}_owner_${t}.png`), fullPage: false });
+    const tx = await text(page);
+    check(ov === 0, `${size} «${t}»: без горизонтальной прокрутки (${ov})`);
+    check(!/Ошибка сервера|Нет доступа|Нет связи/.test(tx), `${size} «${t}»: без ошибок загрузки`);
+    await page.screenshot({ path: join(out, `${size}_${String(i + 1).padStart(2, "0")}_owner_${t}.png`) });
   }
-  await tab(page, "Главная");
-  const home = await text(page);
-  check(/Валовая прибыль/.test(home) && /Себестоимость/.test(home) && /Маржа/.test(home), `${size}: владелец видит валовую, себестоимость, маржу`);
-  check(/Обновлено/.test(home), `${size}: плашка свежести данных`);
-  await tab(page, "Продажи");
-  await page.getByRole("button", { name: "По товарам" }).click(); await page.waitForTimeout(500);
-  await page.screenshot({ path: join(out, `${size}_08_owner_sales_products.png`) });
-  // выход
-  await page.locator('button[title="Выйти"]').click(); await page.waitForTimeout(300);
-  check((await page.locator(".kz-nav-item", { hasText: "Интеграция 1С" }).count()) === 0, `${size}: выход работает`);
-
   if (size === "phone") {
-    let p2 = await open(vp);
-    await login(p2, "director", "Passw0rd1");
-    const dh = await text(p2);
-    check(/Маржа/.test(dh) && !/Себестоимость|Валовая/.test(dh), "директор: маржа есть, себестоимости и валовой нет");
-    await tab(p2, "Продажи");
-    check(!/валовая/i.test(await text(p2)), "директор: в продажах нет валовой");
-    await p2.screenshot({ path: join(out, `phone_10_director_sales.png`) });
-    check((await p2.locator(".kz-nav-item", { hasText: "Сотрудники" }).count()) === 0, "директор: нет вкладки «Сотрудники»");
-
-    p2 = await open(vp);
-    await login(p2, "tp1", "Passw0rd1");
-    const navs = await p2.locator(".kz-nav-item").allInnerTexts();
-    check(navs.join(",") === "Главная,Продажи,Клиенты", "ТП: вкладки " + navs.join(","));
-    check(!/Маржа|Склад по цене/.test(await text(p2)), "ТП: без маржи и склада");
-    await tab(p2, "Клиенты");
-    const ct = await text(p2);
-    check(!/Иванов Пётр/.test(ct) && /Ахметов Ержан/.test(ct), "ТП: только свои клиенты");
-    await p2.screenshot({ path: join(out, `phone_11_tp_clients.png`) });
-
-    p2 = await open(vp);
-    await login(p2, "sklad", "Passw0rd1");
-    const sn = await p2.locator(".kz-nav-item").allInnerTexts();
-    check(sn.join(",") === "Главная,Склад", "склад: вкладки " + sn.join(","));
-    await tab(p2, "Склад");
-    await p2.getByPlaceholder("Товар, артикул или код").fill("Чай"); await p2.waitForTimeout(900);
-    const st = await text(p2);
-    check(/Чай/.test(st) && !/Мука/.test(st), "склад: поиск работает");
-    await p2.screenshot({ path: join(out, `phone_12_sklad_search.png`) });
-
-    // сессия переживает перезагрузку вкладки
-    await p2.reload(); await p2.waitForTimeout(800);
-    check((await p2.locator(".kz-nav-item", { hasText: "Склад" }).count()) === 1, "сессия сохраняется при обновлении страницы");
+    await tab(page, "Главная");
+    const home = await text(page);
+    check(/Валовая прибыль/.test(home) && /Себестоимость/.test(home) && /Маржа/.test(home), "владелец: валовая, себестоимость, маржа");
+    await tab(page, "Продажи");
+    for (const g of ["Товары", "Группы", "Клиенты", "ТП"]) {
+      await page.locator(".kz-main").getByRole("button", { name: g, exact: true }).click(); await page.waitForTimeout(500);
+      check(/Итого выручка/.test(await text(page)), `продажи «${g}»`);
+    }
+    await tab(page, "Команда");
+    await page.getByRole("button", { name: "План продаж на месяц" }).click(); await page.waitForTimeout(700);
+    const inputs = page.locator('.kz-modal input[inputmode="numeric"]');
+    check((await inputs.count()) >= 2, "план: поля по каждому ТП");
+    await inputs.nth(0).fill("3000000"); await inputs.nth(1).fill("2000000");
+    await page.getByRole("button", { name: "Сохранить план" }).click(); await page.waitForTimeout(1000);
+    check(/План \d/.test(await text(page)), "план сохранён и виден в команде");
+    await page.screenshot({ path: join(out, `phone_20_team_plan.png`) });
+    await page.locator(".kz-main >> text=Ахметов Ержан").first().click(); await page.waitForTimeout(900);
+    check(/ТП: Ахметов Ержан/.test(await text(page)), "команда → клиенты ТП");
+    await page.screenshot({ path: join(out, `phone_21_clients_of_tp.png`) });
+    await tab(page, "Задачи");
+    await page.getByRole("button", { name: "Новая задача" }).click(); await page.waitForTimeout(600);
+    await page.getByLabel("Что сделать").fill("Собрать долг с «Айгерим»");
+    const opt = await page.locator(".kz-modal select option", { hasText: "Ержан" }).first().getAttribute("value");
+    await page.locator(".kz-modal select").selectOption(opt);
+    await page.getByRole("button", { name: "Создать" }).click(); await page.waitForTimeout(900);
+    check(/Собрать долг/.test(await text(page)), "задача создана");
+    await tab(page, "AI");
+    await page.getByText("Как идут продажи?").click(); await page.waitForTimeout(1300);
+    check(/Выручка/.test(await text(page)), "AI отвечает по данным");
+    await page.screenshot({ path: join(out, `phone_22_ai.png`) });
+    await page.locator('button[title="Уведомления"]').click(); await page.waitForTimeout(800);
+    check((await page.locator(".kz-modal").count()) === 1, "колокольчик открывает уведомления");
+    await page.screenshot({ path: join(out, `phone_23_bell.png`) });
+    await page.keyboard.press("Escape");
+    await page.locator(".kz-modal").click({ position: { x: 5, y: 5 } }).catch(() => {});
+    await page.waitForTimeout(300);
   }
+  await page.locator('button[title="Выйти"]').first().click({ force: true }); await page.waitForTimeout(500);
+  check((await page.locator(".kz-nav").count()) === 0, `${size}: выход`);
 }
+
+const vp = [375, 812];
+let p2 = await open(vp);
+await login(p2, "director", "Passw0rd1");
+check(!(await navs(p2)).includes("Финансы") && (await navs(p2)).includes("Команда"), "директор: есть Команда, нет Финансов");
+const dh = await text(p2);
+check(/Маржа/.test(dh) && !/Себестоимость|Валовая/.test(dh), "директор: маржа есть, себестоимости и валовой нет");
+await tab(p2, "Команда");
+check(!/Валовая/.test(await text(p2)), "директор: в команде нет валовой");
+await p2.screenshot({ path: join(out, `phone_30_director_team.png`) });
+
+p2 = await open(vp);
+await login(p2, "tp1", "Passw0rd1");
+const tn = await navs(p2);
+check(tn.join(",") === "Главная,Продажи,Команда,Клиенты,Проблемы,Задачи,AI", "ТП: вкладки " + tn.join(","));
+check(!/Маржа|Склад по цене/.test(await text(p2)), "ТП: без маржи и склада");
+await tab(p2, "Клиенты");
+const ct = await text(p2);
+check(!/Иванов Пётр/.test(ct) && /Ахметов Ержан/.test(ct), "ТП: только свои клиенты");
+await tab(p2, "Задачи");
+check(/Собрать долг/.test(await text(p2)), "ТП видит назначенную задачу");
+await p2.getByText("Собрать долг", { exact: false }).first().click(); await p2.waitForTimeout(400);
+await p2.getByRole("button", { name: "В работе" }).click(); await p2.waitForTimeout(900);
+check(/В работе/.test(await text(p2)), "ТП меняет статус задачи");
+await p2.screenshot({ path: join(out, `phone_31_tp_tasks.png`) });
+
+p2 = await open(vp);
+await login(p2, "sklad", "Passw0rd1");
+const sn = await navs(p2);
+check(sn.join(",") === "Главная,Склад,Проблемы,Задачи,AI", "склад: вкладки " + sn.join(","));
+await tab(p2, "Склад");
+await p2.getByPlaceholder("Товар, артикул или код").fill("Чай"); await p2.waitForTimeout(1100);
+const st = await text(p2);
+check(/Чай/.test(st) && !/Мука Цесна/.test(st), "склад: поиск");
+await p2.reload(); await p2.waitForTimeout(1000);
+check((await p2.locator(".kz-nav-item", { hasText: "Склад" }).count()) === 1, "сессия сохраняется при обновлении страницы");
+
 await browser.close();
 site.close();
 console.log(report.join("\n"));
-console.log("Ошибки JS:", errors.length ? errors.slice(0, 5) : "нет");
+console.log("Ошибки JS:", errors.length ? errors.slice(0, 8) : "нет");
 process.exit(fails || errors.length ? 1 : 0);

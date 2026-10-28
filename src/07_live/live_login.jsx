@@ -1,4 +1,4 @@
-// Sapar Trade — рабочая версия. Модуль: вход сотрудника по личному логину и паролю (проверка на сервере)
+// Sapar Trade — система управления. Модуль: вход сотрудника по личному логину и паролю (проверка на сервере)
 // Пароли хранятся на сервере в виде хэша; 5 ошибок подряд — блокировка на 15 минут.
 
 function LiveLogin({ onCancel, onSuccess, notice }) {
@@ -27,8 +27,8 @@ function LiveLogin({ onCancel, onSuccess, notice }) {
         <button onClick={onCancel} className="mb-6 p-2 -ml-2 rounded-full w-fit"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
         <div className="flex flex-col items-center mb-6">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--navy)" }}><Ico name="bar-chart" size={28} color="#fff" /></div>
-          <h1 className="font-display text-center" style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)" }}>Рабочий вход</h1>
-          <p className="text-center" style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Реальные данные из 1С · личный логин и пароль</p>
+          <h1 className="font-display text-center" style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)" }}>Система управления</h1>
+          <p className="text-center" style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Данные из 1С · личный логин и пароль</p>
         </div>
         <Field label="Логин" value={login} autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="username"
           onChange={(e) => { setLogin(e.target.value); setErr(""); }} />

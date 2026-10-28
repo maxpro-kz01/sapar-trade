@@ -86,20 +86,6 @@ for (const size of only) {
   await click(p, "Заказы"); await shot(p, size, "04_admin_orders");
   await click(p, "Склад"); await shot(p, size, "05_admin_stock");
 
-  // Система управления — владелец
-  p = await newPage(vp);
-  await click(p, "Система управления");
-  await click(p, "Владелец (Owner)");
-  await p.locator("input").first().fill("1234"); await click(p, "Войти");
-  await p.locator("input").first().fill("2026"); await click(p, "Подтвердить");
-  await shot(p, size, "06_owner_home");
-  await click(p, "Команда"); await shot(p, size, "07_owner_team");
-  await click(p, "Экспедиторы"); await p.waitForTimeout(600); await shot(p, size, "08_owner_fleet");
-  await click(p, "Клиенты"); await shot(p, size, "09_owner_clients");
-  await click(p, "Финансы"); await shot(p, size, "10_owner_finance");
-  await click(p, "ҚАЗ"); await p.waitForTimeout(300); await shot(p, size, "11_owner_finance_kk");
-  await click(p, "RU"); await p.waitForTimeout(200);
-  await click(p, "Задачи"); await click(p, "Новая задача"); await shot(p, size, "12_modal_task");
 }
 
 await browser.close();

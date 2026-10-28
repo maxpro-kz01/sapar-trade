@@ -18,15 +18,6 @@ function App() {
   const [loggedAgent, setLoggedAgent] = useState(null);
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
-  const [mgRole, setMgRole] = useState(null);
-  const [mgTasks, setMgTasks] = useState([
-    { id: "T1", title: "Погасить просрочку «Минимаркет Айсулу»", who: "Азамат Турсунов", by: "Директор по продажам", deadline: new Date().toISOString().slice(0, 10), prio: "Высокий", status: "В работе", comments: [{ a: "Директор по продажам", t: "Договориться о графике оплаты до пятницы" }] },
-    { id: "T2", title: "Провести инвентаризацию напитков", who: "Дамир — завсклад", by: "Сапар — владелец", deadline: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10), prio: "Средний", status: "Новая", comments: [] },
-  ]);
-  const [mgWeights, setMgWeights] = useState(DEFAULT_WEIGHTS);
-  const [mgSync, setMgSync] = useState({ c1: new Date(Date.now() - 4 * 60000), fail: false, log: [
-    { t: new Date(Date.now() - 4 * 60000), src: "1С", ok: true }] });
-
   const [profile, setProfile] = useState({ name: "", hasShop: false, shopName: "" });
   const [cart, setCart] = useState({});
   const [orders, setOrders] = useState(genOrders());
@@ -58,7 +49,6 @@ function App() {
     auditLog, addAudit, pushLog, setPushLog, notifications, setNotifications, clientNotify,
     cashback, setCashback, bonusRedeemedMonth, setBonusRedeemedMonth,
     agents, setAgents, agentStores, setAgentStores,
-    mgTasks, setMgTasks, mgWeights, setMgWeights, mgSync, setMgSync,
     shift, setShift, shiftHistory, setShiftHistory, directorPhone, setDirectorPhone,
   };
 
@@ -76,12 +66,10 @@ function App() {
 
       <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
-        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "mgmt" ? "mgmtLogin" : role === "live" ? "liveLogin" : "agentLogin")} />}
+        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "live" ? "liveLogin" : "agentLogin")} />}
         {view === "liveLogin" && <LiveLogin notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
-        {view === "live" && liveSession && <LiveApp session={liveSession} setSession={setLiveSession}
+        {view === "live" && liveSession && <MgmtApp session={liveSession} setSession={setLiveSession}
           onExit={(msg) => { setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : HOME); }} />}
-        {view === "mgmtLogin" && <MgmtLogin addAudit={addAudit} onCancel={() => setView("staffChoice")} onSuccess={(r) => { setMgRole(r); setView("mgmt"); }} />}
-        {view === "mgmt" && mgRole && <MgmtApp role={mgRole} shared={shared} onExit={() => { addAudit(MG_ROLES[mgRole].person, "Выход из системы", MG_ROLES[mgRole].label, ""); setMgRole(null); setView(HOME); }} />}
         {view === "adminLogin" && <AdminLogin onCancel={() => setView("staffChoice")} onSuccess={() => setView("admin")} />}
         {view === "admin" && <AdminApp shared={shared} onExit={() => setView(HOME)} />}
         {view === "agentLogin" && <AgentLogin agents={agents} onCancel={() => setView("staffChoice")} onSuccess={(ag) => { setLoggedAgent(ag); setView("agent"); }} />}

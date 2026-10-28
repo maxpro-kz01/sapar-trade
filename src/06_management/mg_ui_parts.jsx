@@ -1,5 +1,5 @@
 // Sapar Trade — прототип. Модуль: Система управления: KPI-плитки, графики, бары, экспорт CSV
-// Строки 3046–3142 исходника sapar-trade-app.html. Глобальный скрипт (без import/export), порядок загрузки — см. src/README.md
+// Общие элементы экранов: карточки, KPI с сравнением периодов, полосы, график, проблемы, выгрузка CSV.
 
 /* ---------- small UI parts ---------- */
 const MgCard = ({ children, style, onClick }) => (
@@ -61,31 +61,16 @@ function MgTrend({ data, color = "#1B1464" }) {
     </div>
   );
 }
-function MgPeriodBar({ period, setPeriod, custom, setCustom }) {
-  return (
-    <div className="mb-3">
-      <div className="flex gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-        {MG_PERIODS.map(([id, l]) => (
-          <button key={id} onClick={() => setPeriod(id)} className="shrink-0 px-3 py-1.5 rounded-full font-semibold"
-            style={{ fontSize: 11.5, background: period === id ? "var(--navy)" : "#F2F1F8", color: period === id ? "#fff" : "var(--ink)" }}>{l}</button>
-        ))}
-      </div>
-      {period === "custom" && (
-        <div className="flex gap-2 mt-2">
-          <input type="date" value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="font-mono-kz flex-1 px-3 py-2 rounded-xl" style={{ border: "1px solid var(--line)", fontSize: 12 }} />
-          <input type="date" value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="font-mono-kz flex-1 px-3 py-2 rounded-xl" style={{ border: "1px solid var(--line)", fontSize: 12 }} />
-        </div>
-      )}
-    </div>
-  );
-}
 const LVL = { red: { bg: "#FCE7E6", fg: "#B3261E", dot: "#E2231A" }, yellow: { bg: "#FFF6DE", fg: "#8A5A00", dot: "#F5A300" }, green: { bg: "#E4F7E9", fg: "#127A33", dot: "#1FA854" } };
 function MgProblemRow({ p, onGo }) {
   const s = LVL[p.lvl];
   return (
-    <button onClick={() => onGo && onGo(p.tab)} className="w-full text-left rounded-xl px-3 py-2.5 mb-2 flex items-center gap-2.5" style={{ background: s.bg }}>
+    <button onClick={() => onGo && onGo(p.tab, p.filter)} className="w-full text-left rounded-xl px-3 py-2.5 mb-2 flex items-center gap-2.5" style={{ background: s.bg }}>
       <span className="rounded-full shrink-0" style={{ width: 9, height: 9, background: s.dot, display: "inline-block" }} />
-      <span style={{ fontSize: 12.5, color: s.fg, fontWeight: 600, flex: 1 }}>{p.text}</span>
+      <span style={{ flex: 1 }}>
+        <span style={{ fontSize: 12.5, color: s.fg, fontWeight: 700, display: "block" }}>{p.title || p.text}</span>
+        {p.detail && <span style={{ fontSize: 11, color: s.fg, opacity: 0.85, display: "block", marginTop: 1 }}>{p.detail}</span>}
+      </span>
     </button>
   );
 }
