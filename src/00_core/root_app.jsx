@@ -11,11 +11,11 @@ function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = (v) => { stSession.set(v); setLiveSessionState(v); };
   const [liveNotice, setLiveNotice] = useState("");
+  const [loginMode, setLoginMode] = useState("mgmt");
   // Стартовый экран — вход для сотрудников. Клиентское приложение (для магазинов) — по ссылке …/#client
   const clientMode = location.hash === "#client";
   const HOME = clientMode ? "client" : "staffChoice";
   const [view, setView] = useState(() => (stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME));
-  const [loggedAgent, setLoggedAgent] = useState(null);
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
   const [profile, setProfile] = useState({ name: "", hasShop: false, shopName: "" });
@@ -30,11 +30,6 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [cashback, setCashback] = useState({ threshold: 50000, reward: 5000 });
   const [bonusRedeemedMonth, setBonusRedeemedMonth] = useState(null);
-  const [agents, setAgents] = useState(AGENTS_SEED);
-  const [agentStores, setAgentStores] = useState([]);
-  const [shift, setShift] = useState(null);            // null = смена закрыта
-  const [shiftHistory, setShiftHistory] = useState([]);
-  const [directorPhone, setDirectorPhone] = useState(DIRECTOR_PHONE_DEFAULT);
 
   const addAudit = (user, action, obj, detail) => {
     setAuditLog((prev) => [{ t: "только что", user, action, obj, detail }, ...prev]);
@@ -48,8 +43,6 @@ function App() {
     warehouse, setWarehouse, stories, setStories, accounts, setAccounts,
     auditLog, addAudit, pushLog, setPushLog, notifications, setNotifications, clientNotify,
     cashback, setCashback, bonusRedeemedMonth, setBonusRedeemedMonth,
-    agents, setAgents, agentStores, setAgentStores,
-    shift, setShift, shiftHistory, setShiftHistory, directorPhone, setDirectorPhone,
   };
 
   return (
@@ -66,14 +59,13 @@ function App() {
 
       <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
-        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(role) => setView(role === "admin" ? "adminLogin" : role === "live" ? "liveLogin" : "agentLogin")} />}
-        {view === "liveLogin" && <LiveLogin notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
-        {view === "live" && liveSession && <MgmtApp session={liveSession} setSession={setLiveSession}
-          onExit={(msg) => { setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : HOME); }} />}
-        {view === "adminLogin" && <AdminLogin onCancel={() => setView("staffChoice")} onSuccess={() => setView("admin")} />}
-        {view === "admin" && <AdminApp shared={shared} onExit={() => setView(HOME)} />}
-        {view === "agentLogin" && <AgentLogin agents={agents} onCancel={() => setView("staffChoice")} onSuccess={(ag) => { setLoggedAgent(ag); setView("agent"); }} />}
-        {view === "agent" && loggedAgent && <AgentApp agent={loggedAgent} shared={shared} onExit={() => { setLoggedAgent(null); setView(HOME); }} />}
+        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(mode) => { setLoginMode(mode); setView("liveLogin"); }} />}
+        {view === "liveLogin" && <LiveLogin mode={loginMode} notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
+        {view === "live" && liveSession && (() => {
+          const exit = (msg) => { setLoginMode(liveSession.mode || "mgmt"); setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : HOME); };
+          const App2 = liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
+          return <App2 session={liveSession} setSession={setLiveSession} onExit={exit} />;
+        })()}
       </div>
     </div>
     </LangCtx.Provider>

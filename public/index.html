@@ -2327,108 +2327,6 @@ const KK_DICT = {
   "Дукен Самал": "Самал дүкені",
   "Дукен Сарыарка": "Сарыарқа дүкені"
 };
-const DIRECTOR_PHONE_DEFAULT = "+7 700 105 17 17";
-const digitsOnly = s => String(s || "").replace(/\D/g, "");
-const shiftDuration = (from, to) => {
-  const mins = Math.max(0, Math.round((to - from) / 60000));
-  const h = Math.floor(mins / 60),
-    m = mins % 60;
-  return (h ? h + " ч " : "") + m + " мин";
-};
-function buildShiftReport(orders, warehouse, from, to, adminName) {
-  const inShift = orders.filter(o => {
-    const d = new Date(o.date);
-    return d >= from && d <= to;
-  });
-  const cancelled = inShift.filter(o => o.status === "Отменён");
-  const live = inShift.filter(o => o.status !== "Отменён");
-  const sum = arr => arr.reduce((s, o) => s + o.total, 0);
-  const payOf = o => o.isDebt ? "debt" : o.payMethod || "cash";
-  const cash = sum(live.filter(o => payOf(o) === "cash"));
-  const card = sum(live.filter(o => payOf(o) === "card"));
-  const transfer = sum(live.filter(o => payOf(o) === "transfer"));
-  const debt = sum(live.filter(o => payOf(o) === "debt"));
-  const revenue = sum(live);
-  const till = cash + card + transfer;
-  const map = {};
-  live.forEach(o => o.items.forEach(it => {
-    if (!map[it.n]) map[it.n] = {
-      n: it.n,
-      qty: 0,
-      sum: 0
-    };
-    map[it.n].qty += it.qty;
-    map[it.n].sum += it.price * it.qty;
-  }));
-  const top = Object.values(map).sort((a, b) => b.sum - a.sum).slice(0, 5);
-  const lowStock = (warehouse || []).filter(p => p.stock <= 30).slice(0, 6);
-  return {
-    from,
-    to,
-    adminName,
-    duration: shiftDuration(from, to),
-    countAll: inShift.length,
-    countShops: live.filter(o => o.type === "shop").length,
-    countIndividuals: live.filter(o => o.type === "individual").length,
-    countAgents: live.filter(o => o.type === "agent").length,
-    countCancelled: cancelled.length,
-    revenue,
-    cash,
-    card,
-    transfer,
-    debt,
-    till,
-    avgCheck: live.length ? Math.round(revenue / live.length) : 0,
-    top,
-    lowStock,
-    delivered: live.filter(o => o.status === "Доставлен").length,
-    inWork: live.filter(o => o.status === "Новый" || o.status === "В обработке" || o.status === "Готов к выдаче").length
-  };
-}
-function reportToText(r) {
-  const L = [];
-  L.push("*ОТЧЁТ ЗА СМЕНУ — ИП «Sapar Trade»*");
-  L.push("Дата: " + dmy(r.from));
-  L.push("Смена: " + hm(r.from) + " — " + hm(r.to) + "  (" + r.duration + ")");
-  L.push("Администратор: " + r.adminName);
-  L.push("");
-  L.push("🧾 *ЗАКАЗЫ: " + r.countAll + "*");
-  L.push("• Магазины: " + r.countShops);
-  L.push("• Частные лица: " + r.countIndividuals);
-  L.push("• От представителей: " + r.countAgents);
-  L.push("• Выдано/доставлено: " + r.delivered);
-  L.push("• В работе: " + r.inWork);
-  L.push("• Отменено: " + r.countCancelled);
-  L.push("");
-  L.push("💰 *ПРОДАЖИ*");
-  L.push("Сумма продаж: " + money(r.revenue));
-  L.push("Средний чек: " + money(r.avgCheck));
-  L.push("");
-  L.push("🏦 *КАССА*");
-  L.push("Наличные: " + money(r.cash));
-  L.push("Картой: " + money(r.card));
-  L.push("Перевод: " + money(r.transfer));
-  L.push("*ИТОГО В КАССУ: " + money(r.till) + "*");
-  L.push("Отпущено в долг: " + money(r.debt));
-  if (r.top.length) {
-    L.push("");
-    L.push("📦 *ТОП ТОВАРОВ*");
-    r.top.forEach((t, i) => L.push(i + 1 + ". " + t.n + " — " + t.qty + " шт · " + money(t.sum)));
-  }
-  if (r.lowStock.length) {
-    L.push("");
-    L.push("⚠️ *ЗАКАНЧИВАЕТСЯ НА СКЛАДЕ*");
-    r.lowStock.forEach(p => L.push("• " + p.name + " — остаток " + p.stock + " " + p.unit));
-  }
-  L.push("");
-  L.push("Отчёт сформирован автоматически: " + dt(r.to));
-  return L.join("\n");
-}
-function sendToWhatsApp(phone, text) {
-  const body = CUR_LANG === "kk" ? text.split("\n").map(trKK).join("\n") : text;
-  const url = "https://wa.me/" + digitsOnly(phone) + "?text=" + encodeURIComponent(body);
-  window.open(url, "_blank");
-}
 const monthKey = d => d.getFullYear() + "-" + d.getMonth();
 const getMonthSpend = (orders, now = new Date()) => {
   const mk = monthKey(now);
@@ -4366,2108 +4264,6 @@ function ClientApp({
     toast: toast
   }));
 }
-function AdminShift({
-  shift,
-  setShift,
-  shiftHistory,
-  setShiftHistory,
-  orders,
-  warehouse,
-  directorPhone,
-  addAudit,
-  showToast
-}) {
-  const ADMIN_NAME = "Гульмира";
-  const [now, setNow] = useState(new Date());
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [doneReport, setDoneReport] = useState(null);
-  useEffect(() => {
-    if (!shift) return;
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, [shift]);
-  const liveReport = shift ? buildShiftReport(orders, warehouse, new Date(shift.startedAt), now, ADMIN_NAME) : null;
-  const start = () => {
-    const d = new Date();
-    setShift({
-      startedAt: d,
-      admin: ADMIN_NAME
-    });
-    addAudit("Админ (" + ADMIN_NAME + ")", "Начало смены", "Смена " + dmy(d), "открыта в " + hm(d));
-    showToast("Смена открыта ✓");
-  };
-  const finish = () => {
-    const to = new Date();
-    const r = buildShiftReport(orders, warehouse, new Date(shift.startedAt), to, shift.admin || ADMIN_NAME);
-    const text = reportToText(r);
-    sendToWhatsApp(directorPhone, text);
-    setShiftHistory([{
-      ...r,
-      text
-    }, ...shiftHistory].slice(0, 30));
-    setShift(null);
-    setConfirmOpen(false);
-    setDoneReport({
-      ...r,
-      text
-    });
-    addAudit("Админ (" + r.adminName + ")", "Завершение смены", "Смена " + dmy(r.from), "касса " + money(r.till) + " · отчёт отправлен директору " + directorPhone);
-    showToast("Смена закрыта · отчёт отправлен ✓");
-  };
-  const copyReport = text => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => showToast("Отчёт скопирован ✓"), () => showToast("Не удалось скопировать"));
-    } else showToast("Не удалось скопировать");
-  };
-  const last = shiftHistory[0];
-  const Row = ({
-    label,
-    value,
-    strong,
-    color
-  }) => React.createElement("div", {
-    className: "flex justify-between py-1.5",
-    style: {
-      borderBottom: "1px dashed var(--line)"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      color: "var(--muted)"
-    }
-  }, label), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 13,
-      fontWeight: strong ? 800 : 700,
-      color: color || "var(--ink)"
-    }
-  }, value));
-  const ReportBody = ({
-    r
-  }) => React.createElement("div", null, React.createElement("div", {
-    className: "rounded-xl p-3 mb-3",
-    style: {
-      background: "#F6F5FA"
-    }
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--muted)"
-    }
-  }, dmy(r.from), " \xB7 ", hm(r.from), " \u2014 ", hm(r.to), " \xB7 ", r.duration), React.createElement("p", {
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700,
-      color: "var(--ink)"
-    }
-  }, "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440: ", r.adminName)), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      marginBottom: 4
-    }
-  }, "\u0417\u0430\u043A\u0430\u0437\u044B"), React.createElement(Row, {
-    label: "\u0412\u0441\u0435\u0433\u043E \u0437\u0430\u043A\u0430\u0437\u043E\u0432",
-    value: r.countAll,
-    strong: true
-  }), React.createElement(Row, {
-    label: "\u041C\u0430\u0433\u0430\u0437\u0438\u043D\u044B",
-    value: r.countShops
-  }), React.createElement(Row, {
-    label: "\u0427\u0430\u0441\u0442\u043D\u044B\u0435 \u043B\u0438\u0446\u0430",
-    value: r.countIndividuals
-  }), React.createElement(Row, {
-    label: "\u041E\u0442 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u0435\u0439",
-    value: r.countAgents
-  }), React.createElement(Row, {
-    label: "\u0412\u044B\u0434\u0430\u043D\u043E / \u0434\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u043E",
-    value: r.delivered
-  }), React.createElement(Row, {
-    label: "\u0412 \u0440\u0430\u0431\u043E\u0442\u0435",
-    value: r.inWork
-  }), React.createElement(Row, {
-    label: "\u041E\u0442\u043C\u0435\u043D\u0435\u043D\u043E",
-    value: r.countCancelled,
-    color: "var(--red)"
-  }), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      margin: "12px 0 4px"
-    }
-  }, "\u041F\u0440\u043E\u0434\u0430\u0436\u0438"), React.createElement(Row, {
-    label: "\u0421\u0443\u043C\u043C\u0430 \u043F\u0440\u043E\u0434\u0430\u0436",
-    value: money(r.revenue),
-    strong: true
-  }), React.createElement(Row, {
-    label: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 \u0447\u0435\u043A",
-    value: money(r.avgCheck)
-  }), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      margin: "12px 0 4px"
-    }
-  }, "\u041A\u0430\u0441\u0441\u0430"), React.createElement(Row, {
-    label: "\u041D\u0430\u043B\u0438\u0447\u043D\u044B\u0435",
-    value: money(r.cash)
-  }), React.createElement(Row, {
-    label: "\u041A\u0430\u0440\u0442\u043E\u0439",
-    value: money(r.card)
-  }), React.createElement(Row, {
-    label: "\u041F\u0435\u0440\u0435\u0432\u043E\u0434",
-    value: money(r.transfer)
-  }), React.createElement("div", {
-    className: "flex justify-between items-center rounded-xl px-3 py-2.5 mt-2",
-    style: {
-      background: "#E4F7E9"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      fontWeight: 800,
-      color: "#127A33"
-    }
-  }, "\u0418\u0422\u041E\u0413\u041E \u0412 \u041A\u0410\u0421\u0421\u0423"), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 16,
-      fontWeight: 800,
-      color: "#127A33"
-    }
-  }, money(r.till))), React.createElement("div", {
-    className: "flex justify-between items-center rounded-xl px-3 py-2 mt-1.5",
-    style: {
-      background: "#FFF6DE"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      color: "#8A5A00"
-    }
-  }, "\u041E\u0442\u043F\u0443\u0449\u0435\u043D\u043E \u0432 \u0434\u043E\u043B\u0433"), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 13.5,
-      fontWeight: 800,
-      color: "#8A5A00"
-    }
-  }, money(r.debt))), r.top.length > 0 && React.createElement(React.Fragment, null, React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      margin: "14px 0 4px"
-    }
-  }, "\u0422\u043E\u043F \u0442\u043E\u0432\u0430\u0440\u043E\u0432"), r.top.map((t, i) => React.createElement("div", {
-    key: i,
-    className: "flex justify-between py-1.5",
-    style: {
-      borderBottom: "1px dashed var(--line)"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5
-    }
-  }, i + 1, ". ", t.n, " \xD7 ", t.qty), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700
-    }
-  }, money(t.sum))))), r.lowStock.length > 0 && React.createElement(React.Fragment, null, React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--red)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      margin: "14px 0 4px"
-    }
-  }, "\u0417\u0430\u043A\u0430\u043D\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043D\u0430 \u0441\u043A\u043B\u0430\u0434\u0435"), r.lowStock.map(p => React.createElement("div", {
-    key: p.id,
-    className: "flex justify-between py-1.5",
-    style: {
-      borderBottom: "1px dashed var(--line)"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5
-    }
-  }, p.name), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700,
-      color: "var(--red)"
-    }
-  }, p.stock, " ", p.unit)))));
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u041E\u0442\u043A\u0440\u044B\u0442\u0438\u0435 \u0438 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u0440\u0430\u0431\u043E\u0447\u0435\u0433\u043E \u0434\u043D\u044F"
-  }, "\u0421\u043C\u0435\u043D\u0430"), !shift ? React.createElement(React.Fragment, null, React.createElement("div", {
-    className: "rounded-2xl p-5 mb-4 text-center",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("div", {
-    className: "mx-auto rounded-full flex items-center justify-center mb-3",
-    style: {
-      width: 76,
-      height: 76,
-      background: "#EEF0FF"
-    }
-  }, React.createElement(Ico, {
-    name: "power",
-    size: 34,
-    color: "var(--navy)",
-    strokeWidth: 2.2
-  })), React.createElement("p", {
-    className: "font-display",
-    style: {
-      fontSize: 15,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, "\u0421\u043C\u0435\u043D\u0430 \u0437\u0430\u043A\u0440\u044B\u0442\u0430"), React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      marginBottom: 14
-    }
-  }, "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u041D\u0430\u0447\u0430\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443\xBB \u2014 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043D\u0430\u0447\u043D\u0451\u0442 \u0441\u0447\u0438\u0442\u0430\u0442\u044C \u0437\u0430\u043A\u0430\u0437\u044B, \u043F\u0440\u043E\u0434\u0430\u0436\u0438 \u0438 \u043A\u0430\u0441\u0441\u0443 \u0437\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F\u0448\u043D\u0438\u0439 \u0434\u0435\u043D\u044C."), React.createElement("button", {
-    onClick: start,
-    className: "w-full rounded-2xl py-4",
-    style: {
-      background: "var(--navy)",
-      color: "#fff"
-    }
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2",
-    style: {
-      fontSize: 15,
-      fontWeight: 800
-    }
-  }, React.createElement(Ico, {
-    name: "play",
-    size: 16,
-    color: "#fff"
-  }), "\u041D\u0430\u0447\u0430\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443"))), last && React.createElement(React.Fragment, null, React.createElement("p", {
-    className: "font-body mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u0441\u043C\u0435\u043D\u0430"), React.createElement("div", {
-    className: "rounded-2xl p-3.5 mb-3",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("div", {
-    className: "flex items-center justify-between mb-1.5"
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700
-    }
-  }, dmy(last.from), " \xB7 ", hm(last.from), "\u2014", hm(last.to)), React.createElement(Badge, {
-    bg: "#E4F7E9",
-    fg: "#127A33"
-  }, "\u043E\u0442\u0447\u0451\u0442 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D")), React.createElement(Row, {
-    label: "\u0417\u0430\u043A\u0430\u0437\u043E\u0432",
-    value: last.countAll
-  }), React.createElement(Row, {
-    label: "\u041F\u0440\u043E\u0434\u0430\u0436\u0438",
-    value: money(last.revenue)
-  }), React.createElement(Row, {
-    label: "\u0412 \u043A\u0430\u0441\u0441\u0443",
-    value: money(last.till),
-    strong: true
-  }), React.createElement("div", {
-    className: "flex gap-2 mt-3"
-  }, React.createElement(GhostButton, {
-    small: true,
-    onClick: () => setDoneReport(last)
-  }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043E\u0442\u0447\u0451\u0442"), React.createElement(GhostButton, {
-    small: true,
-    onClick: () => sendToWhatsApp(directorPhone, last.text)
-  }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0435\u0449\u0451 \u0440\u0430\u0437"))))) : React.createElement(React.Fragment, null, React.createElement("div", {
-    className: "rounded-2xl p-4 mb-3",
-    style: {
-      background: "linear-gradient(160deg,#1B1464,#4B3FCB)",
-      color: "#fff"
-    }
-  }, React.createElement("div", {
-    className: "flex items-center gap-2 mb-2"
-  }, React.createElement("span", {
-    className: "rounded-full",
-    style: {
-      width: 9,
-      height: 9,
-      background: "#5BE38A",
-      display: "inline-block"
-    }
-  }), React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      opacity: 0.9
-    }
-  }, "\u0421\u043C\u0435\u043D\u0430 \u0438\u0434\u0451\u0442")), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 30,
-      fontWeight: 800,
-      lineHeight: 1.1
-    }
-  }, liveReport.duration), React.createElement("p", {
-    style: {
-      fontSize: 12,
-      opacity: 0.85,
-      marginTop: 4
-    }
-  }, "\u041D\u0430\u0447\u0430\u043B\u043E: ", hm(new Date(shift.startedAt)), " \xB7 ", dmy(new Date(shift.startedAt)), " \xB7 ", shift.admin)), React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-3"
-  }, [{
-    l: "Заказов",
-    v: liveReport.countAll,
-    ic: "clipboard"
-  }, {
-    l: "Продажи",
-    v: money(liveReport.revenue),
-    ic: "trending-up"
-  }, {
-    l: "В кассу",
-    v: money(liveReport.till),
-    ic: "wallet"
-  }].map((c, i) => React.createElement("div", {
-    key: i,
-    className: "rounded-2xl p-3",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Ico, {
-    name: c.ic,
-    size: 15,
-    color: "var(--navy)"
-  }), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 13.5,
-      fontWeight: 800,
-      marginTop: 6,
-      wordBreak: "break-word"
-    }
-  }, c.v), React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: "var(--muted)"
-    }
-  }, c.l)))), React.createElement("div", {
-    className: "rounded-2xl p-3.5 mb-3",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      fontWeight: 800,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      marginBottom: 4
-    }
-  }, "\u041A\u0430\u0441\u0441\u0430 \u043D\u0430 \u0442\u0435\u043A\u0443\u0449\u0438\u0439 \u043C\u043E\u043C\u0435\u043D\u0442"), React.createElement(Row, {
-    label: "\u041D\u0430\u043B\u0438\u0447\u043D\u044B\u0435",
-    value: money(liveReport.cash)
-  }), React.createElement(Row, {
-    label: "\u041A\u0430\u0440\u0442\u043E\u0439",
-    value: money(liveReport.card)
-  }), React.createElement(Row, {
-    label: "\u041F\u0435\u0440\u0435\u0432\u043E\u0434",
-    value: money(liveReport.transfer)
-  }), React.createElement(Row, {
-    label: "\u0412 \u0434\u043E\u043B\u0433",
-    value: money(liveReport.debt),
-    color: "#8A5A00"
-  })), React.createElement("div", {
-    className: "rounded-2xl p-3.5 mb-3 flex items-center gap-2.5",
-    style: {
-      background: "#E7FBEF",
-      border: "1px solid #BFEBD0"
-    }
-  }, React.createElement(Ico, {
-    name: "message-circle",
-    size: 18,
-    color: "#127A33"
-  }), React.createElement("div", {
-    className: "flex-1"
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      color: "#0E5F28"
-    }
-  }, "\u041E\u0442\u0447\u0451\u0442 \u0443\u0439\u0434\u0451\u0442 \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0443 \u0432 WhatsApp"), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12,
-      color: "#127A33"
-    }
-  }, directorPhone))), React.createElement("button", {
-    onClick: () => setConfirmOpen(true),
-    className: "w-full rounded-2xl py-4",
-    style: {
-      background: "var(--red)",
-      color: "#fff"
-    }
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2",
-    style: {
-      fontSize: 15,
-      fontWeight: 800
-    }
-  }, React.createElement(Ico, {
-    name: "power",
-    size: 16,
-    color: "#fff"
-  }), "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443")), React.createElement("p", {
-    className: "text-center",
-    style: {
-      fontSize: 11,
-      color: "var(--muted)",
-      marginTop: 8
-    }
-  }, "\u041F\u043E\u043B\u043D\u044B\u0439 \u043E\u0442\u0447\u0451\u0442 \u0437\u0430 \u0434\u0435\u043D\u044C \u0441\u0444\u043E\u0440\u043C\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u0438 \u043E\u0442\u043A\u0440\u043E\u0435\u0442\u0441\u044F \u0432 WhatsApp \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0430.")), confirmOpen && liveReport && React.createElement(Modal, {
-    title: "\u041E\u0442\u0447\u0451\u0442 \u0437\u0430 \u0441\u043C\u0435\u043D\u0443",
-    onClose: () => setConfirmOpen(false),
-    wide: true
-  }, React.createElement(BarcodeStrip, null), React.createElement("div", {
-    className: "py-2"
-  }, React.createElement(ReportBody, {
-    r: liveReport
-  })), React.createElement("div", {
-    className: "rounded-xl p-3 my-3",
-    style: {
-      background: "#EEF0FF"
-    }
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--navy)",
-      fontWeight: 700
-    }
-  }, "\u041F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u044C \u043E\u0442\u0447\u0451\u0442\u0430"), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 13.5,
-      fontWeight: 800,
-      color: "var(--navy)"
-    }
-  }, "\u0414\u0438\u0440\u0435\u043A\u0442\u043E\u0440 \xB7 ", directorPhone)), React.createElement(PrimaryButton, {
-    full: true,
-    onClick: finish
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2"
-  }, React.createElement(Ico, {
-    name: "send",
-    size: 15
-  }), "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0438 \u043E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0443")), React.createElement("div", {
-    className: "mt-2"
-  }, React.createElement(GhostButton, {
-    full: true,
-    onClick: () => setConfirmOpen(false)
-  }, "\u041E\u0442\u043C\u0435\u043D\u0430"))), doneReport && React.createElement(Modal, {
-    title: "\u0421\u043C\u0435\u043D\u0430 \u0437\u0430\u043A\u0440\u044B\u0442\u0430",
-    onClose: () => setDoneReport(null),
-    wide: true
-  }, React.createElement("div", {
-    className: "flex items-center gap-2 rounded-xl p-3 mb-3",
-    style: {
-      background: "#E4F7E9"
-    }
-  }, React.createElement(Ico, {
-    name: "check-circle",
-    size: 20,
-    color: "#127A33"
-  }), React.createElement("p", {
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700,
-      color: "#0E5F28"
-    }
-  }, "\u041E\u0442\u0447\u0451\u0442 \u043E\u0442\u043A\u0440\u044B\u0442 \u0432 WhatsApp \u2014 \u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u043D\u0430\u0436\u0430\u0442\u044C \xAB\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C\xBB")), React.createElement(ReportBody, {
-    r: doneReport
-  }), React.createElement("div", {
-    className: "mt-4 flex flex-col gap-2"
-  }, React.createElement(PrimaryButton, {
-    full: true,
-    onClick: () => sendToWhatsApp(directorPhone, doneReport.text)
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2"
-  }, React.createElement(Ico, {
-    name: "message-circle",
-    size: 15
-  }), "\u041E\u0442\u043A\u0440\u044B\u0442\u044C WhatsApp \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0430")), React.createElement(GhostButton, {
-    full: true,
-    onClick: () => copyReport(doneReport.text)
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2"
-  }, React.createElement(Ico, {
-    name: "copy",
-    size: 14
-  }), "\u0421\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u043E\u0442\u0447\u0451\u0442\u0430")))));
-}
-function AdminOrders({
-  orders,
-  addAudit
-}) {
-  const [tab, setTab] = useState("today");
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().slice(0, 10));
-  const [filter, setFilter] = useState("all");
-  const [open, setOpen] = useState(null);
-  const now = new Date();
-  const list = orders.filter(o => {
-    if (tab === "today") {
-      if (now - o.date > 24 * 3600 * 1000) return false;
-    } else {
-      if (o.date.toISOString().slice(0, 10) !== dateFilter) return false;
-    }
-    if (filter === "shops") return o.type === "shop";
-    if (filter === "individuals") return o.type === "individual";
-    if (filter === "agents") return o.type === "agent";
-    if (filter === "debt") return o.isDebt;
-    return true;
-  });
-  const typeLabel = o => o.type === "shop" ? "Магазин" : o.type === "agent" ? "Представитель: " + o.agentName : "Частное лицо";
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u0417\u0430\u043A\u0430\u0437\u044B \u0437\u0430 24 \u0447\u0430\u0441\u0430 \u0438 \u043F\u043E\u043B\u043D\u0430\u044F \u0438\u0441\u0442\u043E\u0440\u0438\u044F"
-  }, "\u0417\u0430\u043A\u0430\u0437\u044B"), React.createElement("div", {
-    className: "flex gap-2 mb-3"
-  }, React.createElement("button", {
-    onClick: () => setTab("today"),
-    className: "flex-1 rounded-xl py-2.5 font-semibold",
-    style: {
-      fontSize: 12,
-      background: tab === "today" ? "var(--navy)" : "#F2F1F8",
-      color: tab === "today" ? "#fff" : "var(--ink)"
-    }
-  }, "\u0417\u0430 24 \u0447\u0430\u0441\u0430"), React.createElement("button", {
-    onClick: () => setTab("history"),
-    className: "flex-1 rounded-xl py-2.5 font-semibold",
-    style: {
-      fontSize: 12,
-      background: tab === "history" ? "var(--navy)" : "#F2F1F8",
-      color: tab === "history" ? "#fff" : "var(--ink)"
-    }
-  }, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043F\u043E \u0434\u0430\u0442\u0435")), tab === "history" && React.createElement("input", {
-    type: "date",
-    value: dateFilter,
-    onChange: e => setDateFilter(e.target.value),
-    className: "font-mono-kz w-full mb-3 px-3 py-2.5 rounded-xl outline-none",
-    style: {
-      border: "1px solid var(--line)",
-      fontSize: 13
-    }
-  }), React.createElement("div", {
-    className: "flex gap-1.5 overflow-x-auto mb-3 pb-1",
-    style: {
-      scrollbarWidth: "none"
-    }
-  }, [["all", "Все"], ["shops", "Магазины"], ["individuals", "Частные лица"], ["agents", "От представителей"], ["debt", "Долги"]].map(([id, label]) => React.createElement("button", {
-    key: id,
-    onClick: () => setFilter(id),
-    className: "shrink-0 px-3 py-1.5 rounded-full font-semibold",
-    style: {
-      fontSize: 11.5,
-      background: filter === id ? "var(--red)" : "#F2F1F8",
-      color: filter === id ? "#fff" : "var(--ink)"
-    }
-  }, label))), React.createElement("p", {
-    className: "font-mono-kz mb-2",
-    style: {
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, "\u041D\u0430\u0439\u0434\u0435\u043D\u043E: ", list.length), React.createElement("div", {
-    className: "flex flex-col gap-2.5 kz-list"
-  }, list.map(o => {
-    const st = STATUS_STYLE[o.status];
-    return React.createElement("button", {
-      key: o.id,
-      onClick: () => setOpen(o),
-      className: "text-left rounded-2xl p-3.5",
-      style: {
-        background: "#fff",
-        border: "1px solid var(--line)"
-      }
-    }, React.createElement("div", {
-      className: "flex items-center justify-between mb-1"
-    }, React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 11.5,
-        color: "var(--muted)"
-      }
-    }, o.id), React.createElement(Badge, {
-      bg: st.bg,
-      fg: st.fg
-    }, o.status)), React.createElement("p", {
-      style: {
-        fontSize: 13,
-        color: "var(--ink)",
-        fontWeight: 700
-      }
-    }, o.shop || o.name), React.createElement("div", {
-      className: "flex items-center justify-between mt-1"
-    }, React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "var(--muted)"
-      }
-    }, dt(o.date)), React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 13.5,
-        fontWeight: 700,
-        color: "var(--ink)"
-      }
-    }, money(o.total))), React.createElement("div", {
-      className: "flex gap-1.5 mt-1.5 flex-wrap"
-    }, React.createElement(Badge, {
-      bg: "#EEF0FF",
-      fg: "var(--navy)"
-    }, typeLabel(o)), o.isDebt && React.createElement(Badge, {
-      bg: "#FFF6DE",
-      fg: "#8A5A00"
-    }, "\u0414\u043E\u043B\u0433")));
-  }), list.length === 0 && React.createElement("p", {
-    className: "text-center py-10",
-    style: {
-      fontSize: 13,
-      color: "var(--muted)"
-    }
-  }, "\u0417\u0430\u043A\u0430\u0437\u043E\u0432 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E")), open && React.createElement(Modal, {
-    title: open.id,
-    onClose: () => setOpen(null),
-    wide: true
-  }, React.createElement(BarcodeStrip, null), React.createElement("div", {
-    className: "py-3"
-  }, React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u041A\u043B\u0438\u0435\u043D\u0442"), React.createElement("span", {
-    style: {
-      fontWeight: 700
-    }
-  }, open.name)), open.shop && React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u041C\u0430\u0433\u0430\u0437\u0438\u043D"), React.createElement("span", {
-    style: {
-      fontWeight: 700
-    }
-  }, open.shop)), open.type === "agent" && React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u041F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044C"), React.createElement("span", {
-    style: {
-      fontWeight: 700
-    }
-  }, open.agentName)), React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), React.createElement("span", {
-    className: "font-mono-kz"
-  }, open.phone)), React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u0410\u0434\u0440\u0435\u0441"), React.createElement("span", null, open.address)), React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u0414\u0430\u0442\u0430 \u0438 \u0432\u0440\u0435\u043C\u044F"), React.createElement("span", {
-    className: "font-mono-kz"
-  }, dt(open.date))), React.createElement("div", {
-    className: "flex justify-between py-1",
-    style: {
-      fontSize: 12.5
-    }
-  }, React.createElement("span", {
-    style: {
-      color: "var(--muted)"
-    }
-  }, "\u041E\u043F\u043B\u0430\u0442\u0430"), React.createElement("span", null, open.isDebt ? "В долг" : open.payMethod === "transfer" ? "Перевод" : open.payMethod === "card" ? "Картой" : "Наличные"))), React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      marginBottom: 6
-    }
-  }, "\u0421\u043E\u0441\u0442\u0430\u0432 \u0437\u0430\u043A\u0430\u0437\u0430"), open.items.map((it, i) => React.createElement("div", {
-    key: i,
-    className: "flex justify-between py-2",
-    style: {
-      borderBottom: "1px dashed var(--line)",
-      fontSize: 13
-    }
-  }, React.createElement("span", null, it.n, " \xD7 ", it.qty), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontWeight: 700
-    }
-  }, money(it.price * it.qty)))), React.createElement("div", {
-    className: "flex justify-between pt-3 pb-4"
-  }, React.createElement("span", {
-    style: {
-      fontWeight: 700
-    }
-  }, "\u0418\u0442\u043E\u0433\u043E"), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontWeight: 800,
-      fontSize: 17
-    }
-  }, money(open.total))), React.createElement(PrimaryButton, {
-    full: true,
-    onClick: () => {
-      addAudit("Админ (Гульмира)", "Экспорт PDF", open.id, "Скачан чек заказа");
-    }
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2"
-  }, React.createElement(Ico, {
-    name: "download",
-    size: 15
-  }), "\u0421\u043A\u0430\u0447\u0430\u0442\u044C PDF"))));
-}
-function AdminAds({
-  banners,
-  setBanners,
-  pushLog,
-  setPushLog,
-  addAudit,
-  clientNotify
-}) {
-  const [addOpen, setAddOpen] = useState(null);
-  const [caption, setCaption] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [pushText, setPushText] = useState("");
-  const fileRef = useRef(null);
-  const galleryRef = useRef(null);
-  const GRADS = ["linear-gradient(135deg,#1B1464,#3B2FA0)", "linear-gradient(135deg,#E2231A,#FF6A5B)", "linear-gradient(135deg,#FFC800,#FF9A00)", "linear-gradient(135deg,#161327,#4B3FCB)"];
-  const pickFile = e => {
-    const f = e.target.files[0];
-    if (f) setAddOpen({
-      img: URL.createObjectURL(f)
-    });else setAddOpen({
-      img: null
-    });
-  };
-  const saveBanner = () => {
-    const b = {
-      id: "b" + Date.now(),
-      title: caption || "Новая акция",
-      subtitle,
-      grad: GRADS[banners.length % GRADS.length],
-      img: addOpen?.img || null
-    };
-    setBanners([...banners, b]);
-    addAudit("Админ (Гульмира)", "Добавлен баннер", b.title, `слот ${banners.length + 1}/10`);
-    setAddOpen(null);
-    setCaption("");
-    setSubtitle("");
-  };
-  const sendPush = () => {
-    if (!pushText.trim()) return;
-    const entry = {
-      text: pushText,
-      time: new Date().toLocaleString("ru-RU", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit"
-      })
-    };
-    setPushLog([entry, ...pushLog]);
-    clientNotify(pushText);
-    addAudit("Админ (Гульмира)", "Push-уведомление", "Все клиенты", pushText.slice(0, 40));
-    setPushText("");
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: `${banners.length}/10 баннеров · показываются каруселью на главной`
-  }, "\u0420\u0435\u043A\u043B\u0430\u043C\u0430"), React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mb-6"
-  }, banners.map(b => React.createElement("div", {
-    key: b.id,
-    className: "relative rounded-xl overflow-hidden",
-    style: {
-      height: 84,
-      background: b.grad
-    }
-  }, b.img && React.createElement("img", {
-    src: b.img,
-    className: "absolute inset-0 w-full h-full object-cover",
-    alt: ""
-  }), React.createElement("div", {
-    className: "absolute inset-0 p-2 flex flex-col justify-end",
-    style: {
-      background: "linear-gradient(0deg, rgba(0,0,0,0.5), transparent 60%)"
-    }
-  }, React.createElement("p", {
-    className: "text-white font-bold",
-    style: {
-      fontSize: 10.5,
-      lineHeight: 1.2
-    }
-  }, b.title)), React.createElement("button", {
-    onClick: () => setBanners(banners.filter(x => x.id !== b.id)),
-    className: "absolute top-1.5 right-1.5 rounded-full p-1",
-    style: {
-      background: "rgba(0,0,0,0.4)"
-    }
-  }, React.createElement(Ico, {
-    name: "trash",
-    size: 11,
-    color: "#fff"
-  })))), banners.length < 10 && React.createElement("button", {
-    onClick: () => {
-      setAddOpen({
-        img: null
-      });
-    },
-    className: "rounded-xl flex flex-col items-center justify-center gap-1",
-    style: {
-      height: 84,
-      border: "1.5px dashed var(--line)",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus-circle",
-    size: 20
-  }), React.createElement("span", {
-    style: {
-      fontSize: 10.5,
-      fontWeight: 700
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0431\u0430\u043D\u043D\u0435\u0440"))), React.createElement("p", {
-    className: "mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "Push-\u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435 \u0432\u0441\u0435\u043C \u043A\u043B\u0438\u0435\u043D\u0442\u0430\u043C"), React.createElement("textarea", {
-    value: pushText,
-    onChange: e => setPushText(e.target.value),
-    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0417\u0430\u0432\u0442\u0440\u0430 \u0441\u043A\u043B\u0430\u0434 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442 \u0434\u043E 15:00",
-    rows: 3,
-    className: "w-full px-3.5 py-3 rounded-xl outline-none mb-2.5",
-    style: {
-      border: "1.5px solid var(--line)",
-      fontSize: 13.5,
-      resize: "none"
-    }
-  }), React.createElement("div", {
-    className: "mb-5"
-  }, React.createElement(PrimaryButton, {
-    onClick: sendPush
-  }, React.createElement("span", {
-    className: "flex items-center gap-2"
-  }, React.createElement(Ico, {
-    name: "send",
-    size: 14
-  }), "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C"))), pushLog.length > 0 && React.createElement(React.Fragment, null, React.createElement("p", {
-    className: "mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044B\u0435"), React.createElement("div", {
-    className: "flex flex-col gap-2"
-  }, pushLog.slice(0, 5).map((p, i) => React.createElement("div", {
-    key: i,
-    className: "rounded-xl p-3",
-    style: {
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12.5
-    }
-  }, p.text), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 10.5,
-      color: "var(--muted)",
-      marginTop: 3
-    }
-  }, p.time))))), addOpen !== null && React.createElement(Modal, {
-    title: "\u041D\u043E\u0432\u044B\u0439 \u0431\u0430\u043D\u043D\u0435\u0440",
-    onClose: () => setAddOpen(null)
-  }, React.createElement("input", {
-    ref: fileRef,
-    type: "file",
-    accept: "image/*",
-    capture: "environment",
-    className: "hidden",
-    onChange: pickFile
-  }), React.createElement("input", {
-    ref: galleryRef,
-    type: "file",
-    accept: "image/*",
-    className: "hidden",
-    onChange: pickFile
-  }), addOpen.img ? React.createElement("img", {
-    src: addOpen.img,
-    className: "w-full h-32 object-cover rounded-xl mb-3",
-    alt: ""
-  }) : React.createElement("div", {
-    className: "flex gap-2 mb-3"
-  }, React.createElement(GhostButton, {
-    onClick: () => fileRef.current.click()
-  }, React.createElement("span", {
-    className: "flex items-center gap-1.5"
-  }, React.createElement(Ico, {
-    name: "camera",
-    size: 14
-  }), "\u041A\u0430\u043C\u0435\u0440\u0430")), React.createElement(GhostButton, {
-    onClick: () => galleryRef.current.click()
-  }, React.createElement("span", {
-    className: "flex items-center gap-1.5"
-  }, React.createElement(Ico, {
-    name: "image",
-    size: 14
-  }), "\u0413\u0430\u043B\u0435\u0440\u0435\u044F"))), React.createElement(Field, {
-    label: "\u0417\u0430\u0433\u043E\u043B\u043E\u0432\u043E\u043A",
-    placeholder: "\u0421\u043A\u0438\u0434\u043A\u0430 \u221210% \u043D\u0430 \u043D\u0430\u043F\u0438\u0442\u043A\u0438",
-    value: caption,
-    onChange: e => setCaption(e.target.value)
-  }), React.createElement(Field, {
-    label: "\u041F\u043E\u0434\u0437\u0430\u0433\u043E\u043B\u043E\u0432\u043E\u043A",
-    placeholder: "\u041F\u0440\u0438 \u0437\u0430\u043A\u0430\u0437\u0435 \u043E\u0442 50 000 \u20B8",
-    value: subtitle,
-    onChange: e => setSubtitle(e.target.value)
-  }), React.createElement(PrimaryButton, {
-    full: true,
-    onClick: saveBanner
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0431\u0430\u043D\u043D\u0435\u0440")));
-}
-function AdminWarehouse({
-  warehouse,
-  setWarehouse,
-  addAudit
-}) {
-  const [q, setQ] = useState("");
-  const [incoming, setIncoming] = useState(null);
-  const [amount, setAmount] = useState("");
-  const filtered = warehouse.filter(p => p.name.toLowerCase().includes(q.toLowerCase()));
-  const applyIncoming = () => {
-    const n = parseInt(amount, 10);
-    if (!n) return;
-    setWarehouse(warehouse.map(p => p.id === incoming ? {
-      ...p,
-      stock: p.stock + n
-    } : p));
-    const prod = warehouse.find(p => p.id === incoming);
-    addAudit("Склад (Дамир)", "Приход товара", prod.name, `+${n} ${prod.unit}`);
-    setIncoming(null);
-    setAmount("");
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u041E\u0441\u0442\u0430\u0442\u043A\u0438 \u043D\u0430 \u0441\u043A\u043B\u0430\u0434\u0435 \u0438 \u043F\u0440\u0438\u0445\u043E\u0434 \u0442\u043E\u0432\u0430\u0440\u0430"
-  }, "\u0421\u043A\u043B\u0430\u0434"), React.createElement("div", {
-    className: "relative mb-4"
-  }, React.createElement(Ico, {
-    name: "search",
-    size: 16,
-    style: {
-      position: "absolute",
-      left: 13,
-      top: 13
-    },
-    color: "var(--muted)"
-  }), React.createElement("input", {
-    value: q,
-    onChange: e => setQ(e.target.value),
-    placeholder: "\u041D\u0430\u0439\u0442\u0438 \u0442\u043E\u0432\u0430\u0440...",
-    className: "w-full pl-9 pr-3 py-3 rounded-xl outline-none",
-    style: {
-      background: "#F2F1F8",
-      fontSize: 13.5
-    }
-  })), React.createElement("div", {
-    className: "flex flex-col gap-2"
-  }, filtered.map(p => React.createElement("div", {
-    key: p.id,
-    className: "flex items-center gap-3 rounded-xl p-3",
-    style: {
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("div", {
-    className: "rounded-lg flex items-center justify-center shrink-0",
-    style: {
-      width: 38,
-      height: 38,
-      background: "#F2F1F8",
-      fontSize: 17
-    }
-  }, CATEGORIES.find(c => c.id === p.cat)?.emoji), React.createElement("div", {
-    className: "flex-1 min-w-0"
-  }, React.createElement("p", {
-    className: "truncate",
-    style: {
-      fontSize: 12.5,
-      color: "var(--ink)",
-      fontWeight: 600
-    }
-  }, p.name), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 11.5,
-      color: p.stock < 10 ? "var(--red)" : "var(--muted)",
-      fontWeight: p.stock < 10 ? 700 : 500
-    }
-  }, "\u041E\u0441\u0442\u0430\u0442\u043E\u043A: ", p.stock, " ", p.unit, p.stock < 10 ? " · мало!" : "")), React.createElement("button", {
-    onClick: () => setIncoming(p.id),
-    className: "rounded-lg px-2.5 py-2 shrink-0 flex items-center gap-1",
-    style: {
-      background: "#EEF0FF",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus",
-    size: 12
-  }), React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700
-    }
-  }, "\u041F\u0440\u0438\u0445\u043E\u0434"))))), incoming && React.createElement(Modal, {
-    title: "\u041F\u0440\u0438\u0445\u043E\u0434 \u0442\u043E\u0432\u0430\u0440\u0430",
-    onClose: () => setIncoming(null)
-  }, React.createElement("p", {
-    style: {
-      fontSize: 13,
-      fontWeight: 700,
-      marginBottom: 12
-    }
-  }, warehouse.find(p => p.id === incoming)?.name), React.createElement(Field, {
-    label: "\u041A\u043E\u043B\u0438\u0447\u0435\u0441\u0442\u0432\u043E",
-    type: "number",
-    placeholder: "0",
-    value: amount,
-    onChange: e => setAmount(e.target.value),
-    autoFocus: true
-  }), React.createElement(PrimaryButton, {
-    full: true,
-    onClick: applyIncoming
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043D\u0430 \u0441\u043A\u043B\u0430\u0434")));
-}
-function AdminStories({
-  stories,
-  setStories,
-  addAudit
-}) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [media, setMedia] = useState(null);
-  const [caption, setCaption] = useState("");
-  const fileRef = useRef(null);
-  const galleryRef = useRef(null);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick(v => v + 1), 60000);
-    return () => clearInterval(t);
-  }, []);
-  const GRADS = ["linear-gradient(160deg,#1B1464,#4B3FCB)", "linear-gradient(160deg,#E2231A,#FF7A6E)", "linear-gradient(160deg,#FFC800,#FF9A00)", "linear-gradient(160deg,#161327,#4B3FCB)"];
-  const remaining = s => {
-    const left = 24 - s.hoursAgo;
-    if (left <= 0) return "истекает";
-    const h = Math.floor(left),
-      m = Math.round((left - h) * 60);
-    return `осталось ${h}ч ${m}м`;
-  };
-  const publish = () => {
-    const s = {
-      id: "s" + Date.now(),
-      caption: caption || "Новая история",
-      grad: GRADS[stories.length % GRADS.length],
-      views: 0,
-      hoursAgo: 0,
-      media
-    };
-    setStories([s, ...stories]);
-    addAudit("Админ (Гульмира)", "Добавлена история", s.caption.slice(0, 30), media?.type === "video" ? "видео" : "фото");
-    setAddOpen(false);
-    setMedia(null);
-    setCaption("");
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u0425\u0440\u0430\u043D\u044F\u0442\u0441\u044F 24 \u0447\u0430\u0441\u0430, \u0437\u0430\u0442\u0435\u043C \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438"
-  }, "\u0418\u0441\u0442\u043E\u0440\u0438\u0438"), React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
-  }, React.createElement("button", {
-    onClick: () => setAddOpen(true),
-    className: "rounded-xl flex flex-col items-center justify-center gap-1",
-    style: {
-      height: 130,
-      border: "1.5px dashed var(--line)",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus-circle",
-    size: 22
-  }), React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0438\u0441\u0442\u043E\u0440\u0438\u044E")), stories.map(s => React.createElement("div", {
-    key: s.id,
-    className: "relative rounded-xl overflow-hidden flex flex-col justify-between p-2.5",
-    style: {
-      height: 130,
-      background: s.grad
-    }
-  }, s.media?.type === "video" && React.createElement(Ico, {
-    name: "video",
-    size: 14,
-    color: "#fff",
-    style: {
-      position: "absolute",
-      top: 8,
-      left: 8
-    }
-  }), React.createElement("button", {
-    onClick: () => setStories(stories.filter(x => x.id !== s.id)),
-    className: "self-end rounded-full p-1",
-    style: {
-      background: "rgba(0,0,0,0.35)"
-    }
-  }, React.createElement(Ico, {
-    name: "trash",
-    size: 11,
-    color: "#fff"
-  })), React.createElement("div", null, React.createElement("p", {
-    className: "text-white",
-    style: {
-      fontSize: 10.5,
-      fontWeight: 700,
-      lineHeight: 1.25,
-      marginBottom: 4
-    }
-  }, s.caption), React.createElement("div", {
-    className: "flex items-center justify-between"
-  }, React.createElement("span", {
-    className: "flex items-center gap-1 text-white",
-    style: {
-      fontSize: 10,
-      opacity: 0.9
-    }
-  }, React.createElement(Ico, {
-    name: "eye",
-    size: 10
-  }), s.views), React.createElement("span", {
-    className: "flex items-center gap-1 text-white",
-    style: {
-      fontSize: 9,
-      opacity: 0.85
-    }
-  }, React.createElement(Ico, {
-    name: "clock",
-    size: 9
-  }), remaining(s))))))), addOpen && React.createElement(Modal, {
-    title: "\u041D\u043E\u0432\u0430\u044F \u0438\u0441\u0442\u043E\u0440\u0438\u044F",
-    onClose: () => setAddOpen(false)
-  }, React.createElement("input", {
-    ref: fileRef,
-    type: "file",
-    accept: "image/*,video/*",
-    capture: "environment",
-    className: "hidden",
-    onChange: e => {
-      const f = e.target.files[0];
-      if (f) setMedia({
-        url: URL.createObjectURL(f),
-        type: f.type.startsWith("video") ? "video" : "image"
-      });
-    }
-  }), React.createElement("input", {
-    ref: galleryRef,
-    type: "file",
-    accept: "image/*,video/*",
-    className: "hidden",
-    onChange: e => {
-      const f = e.target.files[0];
-      if (f) setMedia({
-        url: URL.createObjectURL(f),
-        type: f.type.startsWith("video") ? "video" : "image"
-      });
-    }
-  }), media ? media.type === "video" ? React.createElement("div", {
-    className: "relative w-full h-40 rounded-xl mb-3 overflow-hidden",
-    style: {
-      background: "#161327"
-    }
-  }, React.createElement("video", {
-    src: media.url,
-    className: "w-full h-full object-cover",
-    muted: true
-  }), React.createElement(Ico, {
-    name: "play",
-    size: 28,
-    color: "#fff",
-    style: {
-      position: "absolute",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%,-50%)"
-    }
-  })) : React.createElement("img", {
-    src: media.url,
-    className: "w-full h-40 object-cover rounded-xl mb-3",
-    alt: ""
-  }) : React.createElement("div", {
-    className: "flex gap-2 mb-3"
-  }, React.createElement(GhostButton, {
-    onClick: () => fileRef.current.click()
-  }, React.createElement("span", {
-    className: "flex items-center gap-1.5"
-  }, React.createElement(Ico, {
-    name: "camera",
-    size: 14
-  }), "\u0421\u043D\u044F\u0442\u044C \u0444\u043E\u0442\u043E/\u0432\u0438\u0434\u0435\u043E (\u226430\u0441)")), React.createElement(GhostButton, {
-    onClick: () => galleryRef.current.click()
-  }, React.createElement("span", {
-    className: "flex items-center gap-1.5"
-  }, React.createElement(Ico, {
-    name: "image",
-    size: 14
-  }), "\u0413\u0430\u043B\u0435\u0440\u0435\u044F"))), React.createElement(Field, {
-    label: "\u0422\u0435\u043A\u0441\u0442 \u043D\u0430 \u0438\u0441\u0442\u043E\u0440\u0438\u0438",
-    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u041D\u043E\u0432\u0430\u044F \u043F\u0430\u0440\u0442\u0438\u044F \u0442\u043E\u0432\u0430\u0440\u0430!",
-    value: caption,
-    onChange: e => setCaption(e.target.value)
-  }), React.createElement(PrimaryButton, {
-    full: true,
-    onClick: publish
-  }, "\u041E\u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u0442\u044C")));
-}
-function AdminCRM({
-  orders
-}) {
-  const today = orders.filter(o => new Date() - o.date < 24 * 3600 * 1000);
-  const revenueToday = today.reduce((s, o) => s + o.total, 0);
-  const avgCheck = today.length ? Math.round(revenueToday / today.length) : 0;
-  const revByDay = useMemo(() => {
-    const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-    const now = new Date();
-    return Array.from({
-      length: 7
-    }).map((_, i) => {
-      const d = new Date(now);
-      d.setDate(d.getDate() - (6 - i));
-      const sum = orders.filter(o => o.date.toDateString() === d.toDateString()).reduce((s, o) => s + o.total, 0);
-      return {
-        day: days[d.getDay() === 0 ? 6 : d.getDay() - 1],
-        sum: sum || Math.round(20000 + Math.random() * 60000)
-      };
-    });
-  }, [orders]);
-  const catStats = CATEGORIES.map(c => ({
-    name: c.name,
-    val: PRODUCTS.filter(p => p.cat === c.id).reduce((s, p) => s + p.stock, 0)
-  }));
-  const kpis = [{
-    label: "Выручка сегодня",
-    value: money(revenueToday || 284500),
-    icon: "dollar",
-    color: "var(--navy)"
-  }, {
-    label: "Заказов сегодня",
-    value: today.length || 12,
-    icon: "package",
-    color: "var(--red)"
-  }, {
-    label: "Средний чек",
-    value: money(avgCheck || 23700),
-    icon: "trending-up",
-    color: "#8A5A00"
-  }, {
-    label: "Новых клиентов",
-    value: 6,
-    icon: "users",
-    color: "#127A33"
-  }];
-  const bySource = [{
-    label: "Магазины (представители)",
-    val: orders.filter(o => o.type === "agent").length
-  }, {
-    label: "Магазины (клиенты)",
-    val: orders.filter(o => o.type === "shop").length
-  }, {
-    label: "Частные лица",
-    val: orders.filter(o => o.type === "individual").length
-  }];
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u041F\u043E\u043B\u043D\u0430\u044F \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0430 \u043F\u0440\u043E\u0434\u0430\u0436"
-  }, "CRM"), React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mb-5"
-  }, kpis.map((k, i) => React.createElement("div", {
-    key: i,
-    className: "rounded-2xl p-3.5",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Ico, {
-    name: k.icon,
-    size: 16,
-    color: k.color
-  }), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 16.5,
-      fontWeight: 800,
-      color: "var(--ink)",
-      marginTop: 6
-    }
-  }, k.value), React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: "var(--muted)"
-    }
-  }, k.label)))), React.createElement("p", {
-    className: "mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase"
-    }
-  }, "\u0412\u044B\u0440\u0443\u0447\u043A\u0430 \u0437\u0430 7 \u0434\u043D\u0435\u0439"), React.createElement("div", {
-    className: "rounded-2xl p-3 mb-5",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(MiniLineChart, {
-    data: revByDay,
-    xKey: "day",
-    yKey: "sum",
-    color: "#1B1464"
-  })), React.createElement("p", {
-    className: "mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase"
-    }
-  }, "\u041E\u0441\u0442\u0430\u0442\u043A\u0438 \u043F\u043E \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F\u043C"), React.createElement("div", {
-    className: "rounded-2xl p-3 mb-5",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(MiniBarChart, {
-    data: catStats,
-    labelKey: "name",
-    valueKey: "val",
-    color: "#E2231A"
-  })), React.createElement("p", {
-    className: "mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase"
-    }
-  }, "\u0417\u0430\u043A\u0430\u0437\u044B \u043F\u043E \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430\u043C"), React.createElement("div", {
-    className: "rounded-2xl p-1",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, bySource.map((b, i) => React.createElement("div", {
-    key: i,
-    className: "flex items-center justify-between px-3 py-2.5",
-    style: {
-      borderBottom: i < bySource.length - 1 ? "1px solid var(--line)" : "none"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      color: "var(--ink)"
-    }
-  }, b.label), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12.5,
-      fontWeight: 700,
-      color: "var(--navy)"
-    }
-  }, b.val)))));
-}
-function AdminAudit({
-  log
-}) {
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u0416\u0443\u0440\u043D\u0430\u043B \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 \u0438 \u0441\u0438\u0441\u0442\u0435\u043C\u044B"
-  }, "\u0410\u0443\u0434\u0438\u0442"), React.createElement("div", {
-    className: "flex items-center gap-2 mb-4 px-3.5 py-2.5 rounded-xl",
-    style: {
-      background: "#EEF0FF"
-    }
-  }, React.createElement(Ico, {
-    name: "shield-check",
-    size: 16,
-    color: "var(--navy)"
-  }), React.createElement("span", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--navy)"
-    }
-  }, "\u041A\u0430\u0436\u0434\u043E\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0435 \u0446\u0435\u043D\u044B, \u043E\u0441\u0442\u0430\u0442\u043A\u0430, \u0441\u0442\u0430\u0442\u0443\u0441\u0430 \u0437\u0430\u043A\u0430\u0437\u0430 \u0438 \u0434\u043E\u043B\u0433\u0430 \u0444\u0438\u043A\u0441\u0438\u0440\u0443\u0435\u0442\u0441\u044F")), React.createElement("div", {
-    className: "flex flex-col"
-  }, log.map((a, i) => React.createElement("div", {
-    key: i,
-    className: "flex gap-3 py-3",
-    style: {
-      borderBottom: i < log.length - 1 ? "1px dashed var(--line)" : "none"
-    }
-  }, React.createElement("div", {
-    className: "rounded-full shrink-0 mt-1",
-    style: {
-      width: 7,
-      height: 7,
-      background: "var(--red)"
-    }
-  }), React.createElement("div", {
-    className: "flex-1"
-  }, React.createElement("div", {
-    className: "flex items-center justify-between"
-  }, React.createElement("span", {
-    style: {
-      fontSize: 12.5,
-      color: "var(--ink)",
-      fontWeight: 700
-    }
-  }, a.action), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, a.t)), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)"
-    }
-  }, a.user, " \xB7 ", a.obj), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 11,
-      color: "var(--navy)",
-      marginTop: 1
-    }
-  }, a.detail))))));
-}
-function AdminSettings({
-  accounts,
-  setAccounts,
-  addAudit,
-  cashback,
-  setCashback,
-  directorPhone,
-  setDirectorPhone
-}) {
-  const update = (id, field, val) => setAccounts(accounts.map(a => a.id === id ? {
-    ...a,
-    [field]: val
-  } : a));
-  const [threshold, setThreshold] = useState(String(cashback.threshold));
-  const [reward, setReward] = useState(String(cashback.reward));
-  const [dirPhone, setDirPhone] = useState(directorPhone);
-  const saveDirector = () => {
-    setDirectorPhone(dirPhone.trim());
-    addAudit("Админ (Гульмира)", "Изменён номер директора", "Отчёт по смене", "WhatsApp → " + dirPhone.trim());
-  };
-  const saveCashback = () => {
-    const t = Math.max(0, Number(threshold.replace(/\D/g, "")) || 0);
-    const r = Math.max(0, Number(reward.replace(/\D/g, "")) || 0);
-    setCashback({
-      threshold: t,
-      reward: r
-    });
-    addAudit("Админ (Гульмира)", "Изменена бонусная программа", "Кэшбэк", `порог ${money(t)} → награда ${money(r)}`);
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u041E\u0442\u0447\u0451\u0442\u044B, \u0431\u043E\u043D\u0443\u0441\u044B \u0438 \u0440\u0435\u043A\u0432\u0438\u0437\u0438\u0442\u044B"
-  }, "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438"), React.createElement("p", {
-    className: "font-body mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "\u041E\u0442\u0447\u0451\u0442 \u043F\u043E \u0441\u043C\u0435\u043D\u0435"), React.createElement("div", {
-    className: "rounded-2xl p-3.5 mb-4",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Field, {
-    label: "WhatsApp \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0430",
-    inputMode: "tel",
-    value: dirPhone,
-    onChange: e => setDirPhone(e.target.value)
-  }), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      marginBottom: 10,
-      lineHeight: 1.4
-    }
-  }, "\u041D\u0430 \u044D\u0442\u043E\u0442 \u043D\u043E\u043C\u0435\u0440 \u0443\u0445\u043E\u0434\u0438\u0442 \u043F\u043E\u043B\u043D\u044B\u0439 \u043E\u0442\u0447\u0451\u0442, \u043A\u043E\u0433\u0434\u0430 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440 \u043D\u0430\u0436\u0438\u043C\u0430\u0435\u0442 \xAB\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443\xBB: \u0437\u0430\u043A\u0430\u0437\u044B, \u0441\u0443\u043C\u043C\u0430 \u043F\u0440\u043E\u0434\u0430\u0436, \u0434\u0435\u043D\u044C\u0433\u0438 \u0432 \u043A\u0430\u0441\u0441\u0435 \u043F\u043E \u0432\u0438\u0434\u0430\u043C \u043E\u043F\u043B\u0430\u0442\u044B, \u0434\u043E\u043B\u0433\u0438, \u0442\u043E\u043F \u0442\u043E\u0432\u0430\u0440\u043E\u0432 \u0438 \u043E\u0441\u0442\u0430\u0442\u043A\u0438 \u043D\u0430 \u0441\u043A\u043B\u0430\u0434\u0435."), React.createElement(GhostButton, {
-    small: true,
-    onClick: saveDirector
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")), React.createElement("p", {
-    className: "font-body mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "\u0411\u043E\u043D\u0443\u0441\u043D\u0430\u044F \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0430"), React.createElement("div", {
-    className: "rounded-2xl p-3.5 mb-4",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Field, {
-    label: "\u041F\u043E\u0440\u043E\u0433 \u043F\u043E\u043A\u0443\u043F\u043E\u043A \u0437\u0430 \u043C\u0435\u0441\u044F\u0446, \u20B8",
-    inputMode: "numeric",
-    value: threshold,
-    onChange: e => setThreshold(e.target.value.replace(/\D/g, ""))
-  }), React.createElement(Field, {
-    label: "\u041D\u0430\u0433\u0440\u0430\u0434\u0430 (\u043A\u044D\u0448\u0431\u044D\u043A), \u20B8",
-    inputMode: "numeric",
-    value: reward,
-    onChange: e => setReward(e.target.value.replace(/\D/g, ""))
-  }), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      marginBottom: 10,
-      lineHeight: 1.4
-    }
-  }, "\u041A\u043E\u0433\u0434\u0430 \u0441\u0443\u043C\u043C\u0430 \u043F\u043E\u043A\u0443\u043F\u043E\u043A \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0437\u0430 \u043A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u043D\u044B\u0439 \u043C\u0435\u0441\u044F\u0446 \u0434\u043E\u0441\u0442\u0438\u0433\u0430\u0435\u0442 \u043F\u043E\u0440\u043E\u0433\u0430, \u0435\u043C\u0443 \u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0441\u044F \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043A\u044D\u0448\u0431\u044D\u043A \u2014 \u0441\u043F\u0438\u0441\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u043E\u0434\u0438\u043D \u0440\u0430\u0437 \u0432 \u043A\u043E\u0440\u0437\u0438\u043D\u0435. \u0421\u0447\u0451\u0442\u0447\u0438\u043A \u043E\u0431\u043D\u0443\u043B\u044F\u0435\u0442\u0441\u044F \u0432 \u043D\u0430\u0447\u0430\u043B\u0435 \u043A\u0430\u0436\u0434\u043E\u0433\u043E \u043D\u043E\u0432\u043E\u0433\u043E \u043C\u0435\u0441\u044F\u0446\u0430."), React.createElement(GhostButton, {
-    small: true,
-    onClick: saveCashback
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")), React.createElement("p", {
-    className: "font-body mb-2",
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: 0.4
-    }
-  }, "\u0421\u0447\u0435\u0442\u0430 \u0434\u043B\u044F \u0437\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F \u043E\u043D\u043B\u0430\u0439\u043D-\u043E\u043F\u043B\u0430\u0442\u044B"), React.createElement("div", {
-    className: "flex flex-col gap-3 mb-4"
-  }, accounts.map(a => React.createElement("div", {
-    key: a.id,
-    className: "rounded-2xl p-3.5",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Field, {
-    label: "\u0411\u0430\u043D\u043A",
-    value: a.bank,
-    onChange: e => update(a.id, "bank", e.target.value)
-  }), React.createElement(Field, {
-    label: "\u041D\u043E\u043C\u0435\u0440 \u0441\u0447\u0451\u0442\u0430 / IBAN",
-    value: a.iban,
-    onChange: e => update(a.id, "iban", e.target.value)
-  }), React.createElement(Field, {
-    label: "\u041F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u044C",
-    value: a.holder,
-    onChange: e => update(a.id, "holder", e.target.value)
-  }), React.createElement(GhostButton, {
-    small: true,
-    onClick: () => addAudit("Бухгалтер (Айдос)", "Изменён счёт", a.bank, "обновлены реквизиты")
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")))), React.createElement("button", {
-    onClick: () => setAccounts([...accounts, {
-      id: "a" + Date.now(),
-      bank: "",
-      iban: "",
-      holder: "ИП «Sapar Trade»"
-    }]),
-    className: "rounded-xl w-full p-3.5 flex items-center justify-center gap-2",
-    style: {
-      border: "1.5px dashed var(--line)",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus-circle",
-    size: 16
-  }), React.createElement("span", {
-    style: {
-      fontSize: 13,
-      fontWeight: 700
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0447\u0451\u0442")));
-}
-function AdminAgents({
-  agents,
-  setAgents,
-  orders,
-  addAudit
-}) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const genLogin = () => "agent" + Math.floor(100 + Math.random() * 900);
-  const genPassword = () => String(Math.floor(1000 + Math.random() * 9000));
-  const openAdd = () => {
-    setName("");
-    setLogin(genLogin());
-    setPassword(genPassword());
-    setAddOpen(true);
-  };
-  const save = () => {
-    if (!name.trim() || !login.trim() || !password.trim()) return;
-    const a = {
-      id: "ag" + Date.now(),
-      name: name.trim(),
-      login: login.trim(),
-      password: password.trim(),
-      active: true
-    };
-    setAgents([...agents, a]);
-    addAudit("Админ (Гульмира)", "Создан торговый представитель", a.name, `логин: ${a.login}`);
-    setAddOpen(false);
-  };
-  const toggleActive = id => {
-    const a = agents.find(x => x.id === id);
-    setAgents(agents.map(x => x.id === id ? {
-      ...x,
-      active: !x.active
-    } : x));
-    addAudit("Админ (Гульмира)", a.active ? "Заблокирован сотрудник" : "Разблокирован сотрудник", a.name, "");
-  };
-  const removeAgent = id => {
-    const a = agents.find(x => x.id === id);
-    setAgents(agents.filter(x => x.id !== id));
-    addAudit("Админ (Гульмира)", "Удалён торговый представитель", a.name, "");
-  };
-  const statsFor = login => {
-    const mine = orders.filter(o => o.type === "agent" && o.agentLogin === login);
-    return {
-      count: mine.length,
-      sum: mine.reduce((s, o) => s + o.total, 0)
-    };
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u0422\u043E\u0440\u0433\u043E\u0432\u044B\u0435 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u0438, \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u044E\u0449\u0438\u0435 \u0437\u0430\u043A\u0430\u0437\u044B \u043F\u043E \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430\u043C"
-  }, "\u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0438"), React.createElement("button", {
-    onClick: openAdd,
-    className: "w-full rounded-2xl p-4 mb-4 flex items-center justify-center gap-2",
-    style: {
-      border: "1.5px dashed var(--line)",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus-circle",
-    size: 18
-  }), React.createElement("span", {
-    style: {
-      fontSize: 13.5,
-      fontWeight: 700
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044F")), React.createElement("div", {
-    className: "flex flex-col gap-2.5 kz-list"
-  }, agents.map(a => {
-    const st = statsFor(a.login);
-    return React.createElement("div", {
-      key: a.id,
-      className: "rounded-2xl p-3.5",
-      style: {
-        background: "#fff",
-        border: "1px solid var(--line)"
-      }
-    }, React.createElement("div", {
-      className: "flex items-center justify-between mb-1.5"
-    }, React.createElement("p", {
-      style: {
-        fontSize: 14,
-        color: "var(--ink)",
-        fontWeight: 700
-      }
-    }, a.name), React.createElement(Toggle, {
-      checked: a.active,
-      onChange: () => toggleActive(a.id)
-    })), React.createElement("div", {
-      className: "flex items-center gap-3 mb-2 flex-wrap"
-    }, React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 11.5,
-        color: "var(--muted)"
-      }
-    }, "\u041B\u043E\u0433\u0438\u043D: ", a.login), React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 11.5,
-        color: "var(--muted)"
-      }
-    }, "\u041F\u0430\u0440\u043E\u043B\u044C: ", a.password)), React.createElement("div", {
-      className: "flex items-center justify-between"
-    }, React.createElement("span", {
-      style: {
-        fontSize: 11.5,
-        color: "var(--muted)"
-      }
-    }, st.count, " \u0437\u0430\u043A\u0430\u0437(\u043E\u0432) \xB7 ", money(st.sum)), React.createElement("button", {
-      onClick: () => removeAgent(a.id),
-      className: "flex items-center gap-1",
-      style: {
-        fontSize: 11.5,
-        color: "var(--red)",
-        fontWeight: 700
-      }
-    }, React.createElement(Ico, {
-      name: "trash",
-      size: 12
-    }), "\u0423\u0434\u0430\u043B\u0438\u0442\u044C")));
-  }), agents.length === 0 && React.createElement("p", {
-    className: "text-center py-10",
-    style: {
-      fontSize: 13,
-      color: "var(--muted)"
-    }
-  }, "\u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442")), addOpen && React.createElement(Modal, {
-    title: "\u041D\u043E\u0432\u044B\u0439 \u0442\u043E\u0440\u0433\u043E\u0432\u044B\u0439 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044C",
-    onClose: () => setAddOpen(false)
-  }, React.createElement(Field, {
-    label: "\u0424\u0418\u041E",
-    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u0410\u0437\u0430\u043C\u0430\u0442 \u0422\u0443\u0440\u0441\u0443\u043D\u043E\u0432",
-    value: name,
-    onChange: e => setName(e.target.value),
-    autoFocus: true
-  }), React.createElement(Field, {
-    label: "\u041B\u043E\u0433\u0438\u043D",
-    value: login,
-    onChange: e => setLogin(e.target.value)
-  }), React.createElement(Field, {
-    label: "\u041F\u0430\u0440\u043E\u043B\u044C",
-    value: password,
-    onChange: e => setPassword(e.target.value)
-  }), React.createElement("p", {
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)",
-      marginBottom: 12,
-      lineHeight: 1.4
-    }
-  }, "\u041B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C \u0441\u0433\u0435\u043D\u0435\u0440\u0438\u0440\u043E\u0432\u0430\u043D\u044B \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u2014 \u043F\u0440\u0438 \u043D\u0435\u043E\u0431\u0445\u043E\u0434\u0438\u043C\u043E\u0441\u0442\u0438 \u0438\u0437\u043C\u0435\u043D\u0438\u0442\u0435 \u0438 \u043F\u0435\u0440\u0435\u0434\u0430\u0439\u0442\u0435 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0443."), React.createElement(PrimaryButton, {
-    full: true,
-    disabled: !name.trim() || !login.trim() || !password.trim(),
-    onClick: save
-  }, "\u0421\u043E\u0437\u0434\u0430\u0442\u044C")));
-}
-function AdminNav({
-  screen,
-  setScreen
-}) {
-  const items = [{
-    id: "shift",
-    icon: "power",
-    label: "Смена"
-  }, {
-    id: "orders",
-    icon: "clipboard",
-    label: "Заказы"
-  }, {
-    id: "ads",
-    icon: "megaphone",
-    label: "Реклама"
-  }, {
-    id: "warehouse",
-    icon: "package",
-    label: "Склад"
-  }, {
-    id: "agents",
-    icon: "users",
-    label: "Сотрудники"
-  }, {
-    id: "stories",
-    icon: "video",
-    label: "Истории"
-  }, {
-    id: "crm",
-    icon: "bar-chart",
-    label: "CRM"
-  }, {
-    id: "audit",
-    icon: "shield-check",
-    label: "Аудит"
-  }, {
-    id: "settings",
-    icon: "settings",
-    label: "Настройки"
-  }];
-  return React.createElement(AppNav, {
-    items: items,
-    active: screen,
-    onPick: setScreen,
-    brand: React.createElement(NavBrand, {
-      title: "Sapar Trade",
-      sub: "\u0410\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C"
-    })
-  });
-}
-function AdminApp({
-  shared,
-  onExit
-}) {
-  const {
-    orders,
-    setOrders,
-    banners,
-    setBanners,
-    warehouse,
-    setWarehouse,
-    stories,
-    setStories,
-    accounts,
-    setAccounts,
-    auditLog,
-    addAudit,
-    pushLog,
-    setPushLog,
-    clientNotify,
-    cashback,
-    setCashback,
-    agents,
-    setAgents,
-    shift,
-    setShift,
-    shiftHistory,
-    setShiftHistory,
-    directorPhone,
-    setDirectorPhone
-  } = shared;
-  const [screen, setScreen] = useState("shift");
-  const [toast, setToast] = useState(null);
-  const showToast = m => {
-    setToast(m);
-    setTimeout(() => setToast(null), 2400);
-  };
-  return React.createElement("div", {
-    className: "relative h-full flex flex-col kz-app",
-    style: {
-      background: "var(--bg)"
-    }
-  }, React.createElement(StatusBar, null), React.createElement("div", {
-    className: "px-5 pb-2 flex items-center gap-2.5 kz-head"
-  }, React.createElement("div", {
-    className: "rounded-xl flex items-center justify-center",
-    style: {
-      width: 32,
-      height: 32,
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Logo, {
-    size: 24
-  })), React.createElement("div", {
-    className: "flex-1"
-  }, React.createElement("p", {
-    className: "font-display",
-    style: {
-      fontSize: 14,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, "Sapar Trade"), React.createElement("p", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, "\u0410\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C")), React.createElement(LangSwitch, null), shift && React.createElement("button", {
-    onClick: () => setScreen("shift"),
-    className: "flex items-center gap-1 px-2 py-1 rounded-lg",
-    style: {
-      background: "#E4F7E9"
-    }
-  }, React.createElement("span", {
-    className: "rounded-full",
-    style: {
-      width: 7,
-      height: 7,
-      background: "#127A33",
-      display: "inline-block"
-    }
-  }), React.createElement("span", {
-    style: {
-      fontSize: 10.5,
-      fontWeight: 700,
-      color: "#127A33"
-    }
-  }, "\u0441\u043C\u0435\u043D\u0430 \u0441 ", hm(new Date(shift.startedAt)))), React.createElement("button", {
-    onClick: onExit,
-    className: "flex items-center gap-1 px-2.5 py-1.5 rounded-lg",
-    style: {
-      background: "#FCE7E6"
-    }
-  }, React.createElement(Ico, {
-    name: "arrow-left",
-    size: 13,
-    color: "var(--red)"
-  }), React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700,
-      color: "var(--red)"
-    }
-  }, "\u0412\u044B\u0445\u043E\u0434"))), React.createElement("div", {
-    className: "flex-1 overflow-y-auto pb-24 kz-main"
-  }, screen === "shift" && React.createElement(AdminShift, {
-    shift: shift,
-    setShift: setShift,
-    shiftHistory: shiftHistory,
-    setShiftHistory: setShiftHistory,
-    orders: orders,
-    warehouse: warehouse,
-    directorPhone: directorPhone,
-    addAudit: addAudit,
-    showToast: showToast
-  }), screen === "orders" && React.createElement(AdminOrders, {
-    orders: orders,
-    addAudit: addAudit
-  }), screen === "ads" && React.createElement(AdminAds, {
-    banners: banners,
-    setBanners: setBanners,
-    pushLog: pushLog,
-    setPushLog: setPushLog,
-    addAudit: addAudit,
-    clientNotify: clientNotify
-  }), screen === "warehouse" && React.createElement(AdminWarehouse, {
-    warehouse: warehouse,
-    setWarehouse: setWarehouse,
-    addAudit: addAudit
-  }), screen === "agents" && React.createElement(AdminAgents, {
-    agents: agents,
-    setAgents: setAgents,
-    orders: orders,
-    addAudit: addAudit
-  }), screen === "stories" && React.createElement(AdminStories, {
-    stories: stories,
-    setStories: setStories,
-    addAudit: addAudit
-  }), screen === "crm" && React.createElement(AdminCRM, {
-    orders: orders
-  }), screen === "audit" && React.createElement(AdminAudit, {
-    log: auditLog
-  }), screen === "settings" && React.createElement(AdminSettings, {
-    accounts: accounts,
-    setAccounts: setAccounts,
-    addAudit: addAudit,
-    cashback: cashback,
-    setCashback: setCashback,
-    directorPhone: directorPhone,
-    setDirectorPhone: setDirectorPhone
-  })), React.createElement(AdminNav, {
-    screen: screen,
-    setScreen: setScreen
-  }), React.createElement(Toast, {
-    toast: toast
-  }));
-}
 function StaffGate({
   onCancel,
   onPick
@@ -6542,7 +4338,7 @@ function StaffGate({
       fontSize: 11.5,
       color: "var(--muted)"
     }
-  }, "\u0417\u0430\u043A\u0430\u0437\u044B, \u0441\u043A\u043B\u0430\u0434, \u0440\u0435\u043A\u043B\u0430\u043C\u0430, \u043E\u0442\u0447\u0451\u0442\u044B")), React.createElement(Ico, {
+  }, "\u0421\u043C\u0435\u043D\u0430, \u0437\u0430\u043A\u0430\u0437\u044B, \u0441\u043A\u043B\u0430\u0434, \u043E\u0442\u0447\u0451\u0442 \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0443")), React.createElement(Ico, {
     name: "arrow-left",
     size: 16,
     color: "var(--muted)",
@@ -6550,7 +4346,7 @@ function StaffGate({
       transform: "rotate(180deg)"
     }
   })), React.createElement("button", {
-    onClick: () => onPick("agent"),
+    onClick: () => onPick("tp"),
     className: "rounded-2xl p-4 flex items-center gap-3 press-98",
     style: {
       border: "1.5px solid var(--line)",
@@ -6578,7 +4374,7 @@ function StaffGate({
       fontSize: 11.5,
       color: "var(--muted)"
     }
-  }, "\u041F\u0440\u0438\u0451\u043C \u0437\u0430\u043A\u0430\u0437\u043E\u0432 \u043F\u043E \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430\u043C")), React.createElement(Ico, {
+  }, "\u041C\u043E\u0438 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u044B \u0438 \u0437\u0430\u043A\u0430\u0437\u044B \xB7 \u0434\u0430\u043D\u043D\u044B\u0435 1\u0421")), React.createElement(Ico, {
     name: "arrow-left",
     size: 16,
     color: "var(--muted)",
@@ -6586,7 +4382,7 @@ function StaffGate({
       transform: "rotate(180deg)"
     }
   })), React.createElement("button", {
-    onClick: () => onPick("live"),
+    onClick: () => onPick("mgmt"),
     className: "rounded-2xl p-4 mt-3 flex items-center gap-3 press-98",
     style: {
       border: "1.5px solid var(--navy)",
@@ -6622,844 +4418,6 @@ function StaffGate({
       transform: "rotate(180deg)"
     }
   }))));
-}
-function AdminLogin({
-  onCancel,
-  onSuccess
-}) {
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const submit = () => {
-    if (login === "admin" && password === "admin") {
-      setError("");
-      onSuccess();
-    } else setError("Неверный логин или пароль");
-  };
-  return React.createElement("div", {
-    className: "relative h-full",
-    style: {
-      background: "var(--bg)"
-    }
-  }, React.createElement(StatusBar, null), React.createElement("div", {
-    className: "flex flex-col h-full px-6 pt-4 font-body kz-narrow"
-  }, React.createElement("button", {
-    onClick: onCancel,
-    className: "mb-6 p-2 -ml-2 rounded-full w-fit"
-  }, React.createElement(Ico, {
-    name: "arrow-left",
-    size: 20,
-    color: "var(--ink)"
-  })), React.createElement("div", {
-    className: "flex flex-col items-center mb-8"
-  }, React.createElement("div", {
-    className: "w-16 h-16 rounded-2xl flex items-center justify-center mb-3",
-    style: {
-      background: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "shield-check",
-    size: 28,
-    color: "#fff"
-  })), React.createElement("h1", {
-    className: "font-display text-center",
-    style: {
-      fontSize: 19,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, "\u0412\u0445\u043E\u0434 \u0434\u043B\u044F \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0430"), React.createElement("p", {
-    className: "text-center",
-    style: {
-      fontSize: 12.5,
-      color: "var(--muted)",
-      marginTop: 2
-    }
-  }, "\u0414\u043E\u0441\u0442\u0443\u043F \u0442\u043E\u043B\u044C\u043A\u043E \u0434\u043B\u044F \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0438")), React.createElement(Field, {
-    label: "\u041B\u043E\u0433\u0438\u043D",
-    placeholder: "admin",
-    value: login,
-    autoCapitalize: "none",
-    autoCorrect: "off",
-    spellCheck: "false",
-    onChange: e => {
-      setLogin(e.target.value);
-      setError("");
-    }
-  }), React.createElement(Field, {
-    label: "\u041F\u0430\u0440\u043E\u043B\u044C",
-    placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022",
-    type: "password",
-    value: password,
-    onChange: e => {
-      setPassword(e.target.value);
-      setError("");
-    },
-    onKeyDown: e => {
-      if (e.key === "Enter") submit();
-    }
-  }), error && React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--red)",
-      fontWeight: 600,
-      marginTop: -8,
-      marginBottom: 12
-    }
-  }, error), React.createElement("div", {
-    className: "mt-auto pb-8"
-  }, React.createElement(PrimaryButton, {
-    full: true,
-    disabled: !login || !password,
-    onClick: submit
-  }, "\u0412\u043E\u0439\u0442\u0438"))));
-}
-function AgentLogin({
-  agents,
-  onCancel,
-  onSuccess
-}) {
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const submit = () => {
-    const found = agents.find(a => a.login === login && a.password === password);
-    if (!found) {
-      setError("Неверный логин или пароль");
-      return;
-    }
-    if (!found.active) {
-      setError("Доступ заблокирован администратором");
-      return;
-    }
-    setError("");
-    onSuccess(found);
-  };
-  return React.createElement("div", {
-    className: "relative h-full",
-    style: {
-      background: "var(--bg)"
-    }
-  }, React.createElement(StatusBar, null), React.createElement("div", {
-    className: "flex flex-col h-full px-6 pt-4 font-body kz-narrow"
-  }, React.createElement("button", {
-    onClick: onCancel,
-    className: "mb-6 p-2 -ml-2 rounded-full w-fit"
-  }, React.createElement(Ico, {
-    name: "arrow-left",
-    size: 20,
-    color: "var(--ink)"
-  })), React.createElement("div", {
-    className: "flex flex-col items-center mb-8"
-  }, React.createElement("div", {
-    className: "w-16 h-16 rounded-2xl flex items-center justify-center mb-3",
-    style: {
-      background: "#8A5A00"
-    }
-  }, React.createElement(Ico, {
-    name: "users",
-    size: 28,
-    color: "#fff"
-  })), React.createElement("h1", {
-    className: "font-display text-center",
-    style: {
-      fontSize: 19,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, "\u0412\u0445\u043E\u0434 \u0434\u043B\u044F \u0442\u043E\u0440\u0433\u043E\u0432\u043E\u0433\u043E \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044F"), React.createElement("p", {
-    className: "text-center",
-    style: {
-      fontSize: 12.5,
-      color: "var(--muted)",
-      marginTop: 2
-    }
-  }, "\u041B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C \u0432\u044B\u0434\u0430\u0451\u0442 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440")), React.createElement(Field, {
-    label: "\u041B\u043E\u0433\u0438\u043D",
-    placeholder: "\u041B\u043E\u0433\u0438\u043D",
-    value: login,
-    autoCapitalize: "none",
-    autoCorrect: "off",
-    spellCheck: "false",
-    onChange: e => {
-      setLogin(e.target.value);
-      setError("");
-    }
-  }), React.createElement(Field, {
-    label: "\u041F\u0430\u0440\u043E\u043B\u044C",
-    placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022",
-    type: "password",
-    value: password,
-    onChange: e => {
-      setPassword(e.target.value);
-      setError("");
-    },
-    onKeyDown: e => {
-      if (e.key === "Enter") submit();
-    }
-  }), error && React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--red)",
-      fontWeight: 600,
-      marginTop: -8,
-      marginBottom: 12
-    }
-  }, error), React.createElement("div", {
-    className: "mt-auto pb-8"
-  }, React.createElement(PrimaryButton, {
-    full: true,
-    disabled: !login || !password,
-    onClick: submit
-  }, "\u0412\u043E\u0439\u0442\u0438"))));
-}
-function AgentStores({
-  agent,
-  agentStores,
-  setAgentStores,
-  onOpenStore,
-  addAudit
-}) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [addr, setAddr] = useState("");
-  const [phone, setPhone] = useState("");
-  const mine = agentStores.filter(s => s.agentLogin === agent.login);
-  const save = () => {
-    if (!name.trim()) return;
-    const s = {
-      id: "st" + Date.now(),
-      agentLogin: agent.login,
-      name: name.trim(),
-      addr: addr.trim(),
-      phone: phone.trim()
-    };
-    setAgentStores([...agentStores, s]);
-    addAudit(agent.name, "Добавлен магазин", s.name, s.addr || "—");
-    setAddOpen(false);
-    setName("");
-    setAddr("");
-    setPhone("");
-  };
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u041C\u0430\u0433\u0430\u0437\u0438\u043D\u044B, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0432\u044B \u043E\u0431\u0441\u043B\u0443\u0436\u0438\u0432\u0430\u0435\u0442\u0435"
-  }, "\u041C\u043E\u0438 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u044B"), React.createElement("button", {
-    onClick: () => setAddOpen(true),
-    className: "w-full rounded-2xl p-4 mb-4 flex items-center justify-center gap-2",
-    style: {
-      border: "1.5px dashed var(--line)",
-      color: "var(--navy)"
-    }
-  }, React.createElement(Ico, {
-    name: "plus-circle",
-    size: 18
-  }), React.createElement("span", {
-    style: {
-      fontSize: 13.5,
-      fontWeight: 700
-    }
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043C\u0430\u0433\u0430\u0437\u0438\u043D")), React.createElement("div", {
-    className: "flex flex-col gap-2.5 kz-list"
-  }, mine.map(s => React.createElement("button", {
-    key: s.id,
-    onClick: () => onOpenStore(s),
-    className: "text-left rounded-2xl p-3.5 flex items-center gap-3",
-    style: {
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement("div", {
-    className: "rounded-xl p-2.5 shrink-0",
-    style: {
-      background: "#EEF0FF"
-    }
-  }, React.createElement(Ico, {
-    name: "store",
-    size: 18,
-    color: "var(--navy)"
-  })), React.createElement("div", {
-    className: "flex-1 min-w-0"
-  }, React.createElement("p", {
-    style: {
-      fontSize: 14,
-      color: "var(--ink)",
-      fontWeight: 700
-    }
-  }, s.name), s.addr && React.createElement("p", {
-    className: "truncate",
-    style: {
-      fontSize: 11.5,
-      color: "var(--muted)"
-    }
-  }, s.addr)), React.createElement(Ico, {
-    name: "arrow-left",
-    size: 16,
-    color: "var(--muted)",
-    style: {
-      transform: "rotate(180deg)"
-    }
-  }))), mine.length === 0 && React.createElement("p", {
-    className: "text-center py-10",
-    style: {
-      fontSize: 13,
-      color: "var(--muted)"
-    }
-  }, "\u041C\u0430\u0433\u0430\u0437\u0438\u043D\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442 \u2014 \u0434\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u043F\u0435\u0440\u0432\u044B\u0439")), addOpen && React.createElement(Modal, {
-    title: "\u041D\u043E\u0432\u044B\u0439 \u043C\u0430\u0433\u0430\u0437\u0438\u043D",
-    onClose: () => setAddOpen(false)
-  }, React.createElement(Field, {
-    label: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430",
-    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, Dinara",
-    value: name,
-    onChange: e => setName(e.target.value),
-    autoFocus: true
-  }), React.createElement(Field, {
-    label: "\u0410\u0434\u0440\u0435\u0441",
-    placeholder: "\u0433. \u041A\u044B\u0437\u044B\u043B\u043E\u0440\u0434\u0430, \u0443\u043B. ...",
-    value: addr,
-    onChange: e => setAddr(e.target.value)
-  }), React.createElement(Field, {
-    label: "\u0422\u0435\u043B\u0435\u0444\u043E\u043D",
-    placeholder: "+7 7XX XXX XX XX",
-    value: phone,
-    onChange: e => setPhone(e.target.value)
-  }), React.createElement(PrimaryButton, {
-    full: true,
-    disabled: !name.trim(),
-    onClick: save
-  }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043C\u0430\u0433\u0430\u0437\u0438\u043D")));
-}
-function AgentStoreOrder({
-  store,
-  warehouse,
-  onBack,
-  onSubmitOrder
-}) {
-  const [cart, setCart] = useState({});
-  const [activeCat, setActiveCat] = useState(null);
-  const [q, setQ] = useState("");
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [isDebt, setIsDebt] = useState(false);
-  const [payMethod, setPayMethod] = useState("cash");
-  const filtered = useMemo(() => warehouse.filter(p => (!activeCat || p.cat === activeCat) && (!q || p.name.toLowerCase().includes(q.toLowerCase()))), [activeCat, q, warehouse]);
-  const items = Object.entries(cart).map(([id, qty]) => ({
-    p: warehouse.find(x => x.id === Number(id)),
-    qty
-  })).filter(it => it.p);
-  const total = items.reduce((s, it) => s + it.p.price * it.qty, 0);
-  const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
-  const submit = () => {
-    onSubmitOrder({
-      items,
-      total,
-      isDebt,
-      payMethod
-    });
-    setCart({});
-    setCheckoutOpen(false);
-    setIsDebt(false);
-    setPayMethod("cash");
-  };
-  return React.createElement("div", {
-    className: "relative flex-1 flex flex-col overflow-hidden font-body"
-  }, React.createElement("div", {
-    className: "px-5 pt-4 pb-2 flex items-center gap-2.5"
-  }, React.createElement("button", {
-    onClick: onBack,
-    className: "p-1.5 -ml-1.5 rounded-full"
-  }, React.createElement(Ico, {
-    name: "arrow-left",
-    size: 19,
-    color: "var(--ink)"
-  })), React.createElement("div", {
-    className: "flex-1 min-w-0"
-  }, React.createElement("p", {
-    className: "font-display truncate",
-    style: {
-      fontSize: 16,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, store.name), store.addr && React.createElement("p", {
-    className: "truncate",
-    style: {
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, store.addr))), React.createElement("div", {
-    className: "flex-1 overflow-y-auto px-5 pb-24 kz-main"
-  }, React.createElement("div", {
-    className: "relative mb-3 mt-1"
-  }, React.createElement(Ico, {
-    name: "search",
-    size: 16,
-    style: {
-      position: "absolute",
-      left: 13,
-      top: 13
-    },
-    color: "var(--muted)"
-  }), React.createElement("input", {
-    value: q,
-    onChange: e => setQ(e.target.value),
-    placeholder: "\u041F\u043E\u0438\u0441\u043A \u0442\u043E\u0432\u0430\u0440\u0430...",
-    className: "w-full pl-9 pr-3 py-3 rounded-xl outline-none",
-    style: {
-      background: "#F2F1F8",
-      fontSize: 13.5,
-      color: "var(--ink)"
-    }
-  })), React.createElement("div", {
-    className: "flex gap-2 overflow-x-auto mb-4 pb-1",
-    style: {
-      scrollbarWidth: "none"
-    }
-  }, React.createElement("button", {
-    onClick: () => setActiveCat(null),
-    className: "shrink-0 px-3.5 py-2 rounded-full font-semibold",
-    style: {
-      fontSize: 12,
-      background: !activeCat ? "var(--navy)" : "#F2F1F8",
-      color: !activeCat ? "#fff" : "var(--ink)"
-    }
-  }, "\u0412\u0441\u0435"), CATEGORIES.map(c => React.createElement("button", {
-    key: c.id,
-    onClick: () => setActiveCat(c.id),
-    className: "shrink-0 px-3.5 py-2 rounded-full font-semibold flex items-center gap-1",
-    style: {
-      fontSize: 12,
-      background: activeCat === c.id ? "var(--navy)" : "#F2F1F8",
-      color: activeCat === c.id ? "#fff" : "var(--ink)"
-    }
-  }, React.createElement("span", null, c.emoji), c.name))), React.createElement("div", {
-    className: "grid grid-cols-2 gap-3"
-  }, filtered.map(p => React.createElement(ProductCard, {
-    key: p.id,
-    p: p,
-    qty: cart[p.id] || 0,
-    onAdd: () => setCart({
-      ...cart,
-      [p.id]: 1
-    }),
-    onInc: () => setCart({
-      ...cart,
-      [p.id]: (cart[p.id] || 0) + 1
-    }),
-    onDec: () => {
-      const n = {
-        ...cart
-      };
-      if (n[p.id] <= 1) delete n[p.id];else n[p.id] -= 1;
-      setCart(n);
-    }
-  })), filtered.length === 0 && React.createElement("p", {
-    className: "col-span-2 text-center py-10",
-    style: {
-      fontSize: 13,
-      color: "var(--muted)"
-    }
-  }, "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E"))), cartCount > 0 && React.createElement("div", {
-    className: "absolute bottom-0 left-0 right-0 px-5 pt-3",
-    style: {
-      background: "#fff",
-      borderTop: "1px solid var(--line)",
-      paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))"
-    }
-  }, React.createElement(PrimaryButton, {
-    full: true,
-    onClick: () => setCheckoutOpen(true)
-  }, React.createElement("span", {
-    className: "flex items-center justify-center gap-2"
-  }, "\u041A\u043E\u0440\u0437\u0438\u043D\u0430 \xB7 ", cartCount, " \xB7 ", money(total)))), checkoutOpen && React.createElement(Modal, {
-    title: "\u041E\u0444\u043E\u0440\u043C\u043B\u0435\u043D\u0438\u0435 \u0437\u0430\u043A\u0430\u0437\u0430",
-    onClose: () => setCheckoutOpen(false),
-    wide: true
-  }, items.map(({
-    p,
-    qty
-  }) => React.createElement("div", {
-    key: p.id,
-    className: "flex items-center gap-3 py-2.5",
-    style: {
-      borderBottom: "1px dashed var(--line)"
-    }
-  }, React.createElement("div", {
-    className: "flex-1 min-w-0"
-  }, React.createElement("p", {
-    className: "truncate",
-    style: {
-      fontSize: 13,
-      color: "var(--ink)",
-      fontWeight: 600
-    }
-  }, p.name), React.createElement("p", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12,
-      color: "var(--navy)",
-      fontWeight: 700
-    }
-  }, money(p.price * qty))), React.createElement("div", {
-    className: "flex items-center gap-1 rounded-lg px-1 py-1",
-    style: {
-      background: "#F2F1F8"
-    }
-  }, React.createElement("button", {
-    onClick: () => setCart(qty <= 1 ? Object.fromEntries(Object.entries(cart).filter(([k]) => k != p.id)) : {
-      ...cart,
-      [p.id]: qty - 1
-    }),
-    className: "p-1"
-  }, React.createElement(Ico, {
-    name: "minus",
-    size: 12
-  })), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 12,
-      width: 18,
-      textAlign: "center"
-    }
-  }, qty), React.createElement("button", {
-    onClick: () => setCart({
-      ...cart,
-      [p.id]: qty + 1
-    }),
-    className: "p-1"
-  }, React.createElement(Ico, {
-    name: "plus",
-    size: 12
-  }))))), React.createElement("div", {
-    className: "flex items-center justify-between px-3.5 py-3.5 rounded-xl mt-3",
-    style: {
-      background: "#FFF6DE",
-      border: "1px solid #FFE49B"
-    }
-  }, React.createElement("div", null, React.createElement("p", {
-    style: {
-      fontSize: 13,
-      color: "var(--ink)",
-      fontWeight: 700
-    }
-  }, "\u0412\u0437\u044F\u0442\u044C \u0437\u0430\u043A\u0430\u0437 \u0432 \u0434\u043E\u043B\u0433"), React.createElement("p", {
-    style: {
-      fontSize: 11,
-      color: "var(--muted)"
-    }
-  }, "\u041C\u0430\u0433\u0430\u0437\u0438\u043D \u043E\u043F\u043B\u0430\u0442\u0438\u0442 \u043F\u043E\u0437\u0436\u0435")), React.createElement(Toggle, {
-    checked: isDebt,
-    onChange: setIsDebt
-  })), !isDebt && React.createElement("div", {
-    className: "mt-3"
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      fontWeight: 600,
-      marginBottom: 8
-    }
-  }, "\u0421\u043F\u043E\u0441\u043E\u0431 \u043E\u043F\u043B\u0430\u0442\u044B"), React.createElement("div", {
-    className: "flex gap-2"
-  }, React.createElement("button", {
-    onClick: () => setPayMethod("cash"),
-    className: "flex-1 rounded-xl py-2.5 font-semibold",
-    style: {
-      fontSize: 12,
-      background: payMethod === "cash" ? "var(--navy)" : "#F2F1F8",
-      color: payMethod === "cash" ? "#fff" : "var(--ink)"
-    }
-  }, "\u041D\u0430\u043B\u0438\u0447\u043D\u044B\u0435"), React.createElement("button", {
-    onClick: () => setPayMethod("transfer"),
-    className: "flex-1 rounded-xl py-2.5 font-semibold",
-    style: {
-      fontSize: 12,
-      background: payMethod === "transfer" ? "var(--navy)" : "#F2F1F8",
-      color: payMethod === "transfer" ? "#fff" : "var(--ink)"
-    }
-  }, "\u041F\u0435\u0440\u0435\u0432\u043E\u0434"))), React.createElement("div", {
-    className: "flex items-center justify-between py-4"
-  }, React.createElement("span", {
-    style: {
-      fontSize: 13,
-      color: "var(--muted)",
-      fontWeight: 600
-    }
-  }, "\u0418\u0442\u043E\u0433\u043E"), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontSize: 20,
-      color: "var(--ink)",
-      fontWeight: 800
-    }
-  }, money(total))), React.createElement(PrimaryButton, {
-    full: true,
-    disabled: items.length === 0,
-    onClick: submit
-  }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0432 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0443")));
-}
-function AgentOrders({
-  agent,
-  orders
-}) {
-  const mine = orders.filter(o => o.type === "agent" && o.agentLogin === agent.login);
-  const [open, setOpen] = useState(null);
-  if (mine.length === 0) {
-    return React.createElement("div", {
-      className: "flex flex-col items-center justify-center h-full px-8 font-body text-center"
-    }, React.createElement("div", {
-      className: "rounded-full p-5 mb-4",
-      style: {
-        background: "#F2F1F8"
-      }
-    }, React.createElement(Ico, {
-      name: "clipboard",
-      size: 28,
-      color: "var(--muted)"
-    })), React.createElement("p", {
-      style: {
-        fontSize: 14,
-        color: "var(--ink)",
-        fontWeight: 700
-      }
-    }, "\u0417\u0430\u043A\u0430\u0437\u043E\u0432 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442"));
-  }
-  return React.createElement("div", {
-    className: "px-5 pt-4 pb-4 font-body"
-  }, React.createElement(SectionTitle, {
-    sub: "\u0417\u0430\u043A\u0430\u0437\u044B, \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044B\u0435 \u0432\u0430\u043C\u0438 \u0432 \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u043A\u0443"
-  }, "\u041C\u043E\u0438 \u0437\u0430\u043A\u0430\u0437\u044B"), React.createElement("div", {
-    className: "flex flex-col gap-2.5 kz-list"
-  }, mine.map(o => {
-    const st = STATUS_STYLE[o.status];
-    return React.createElement("button", {
-      key: o.id,
-      onClick: () => setOpen(o),
-      className: "text-left rounded-2xl p-3.5",
-      style: {
-        background: "#fff",
-        border: "1px solid var(--line)"
-      }
-    }, React.createElement("div", {
-      className: "flex items-center justify-between mb-1.5"
-    }, React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 12,
-        color: "var(--muted)"
-      }
-    }, o.id), React.createElement(Badge, {
-      bg: st.bg,
-      fg: st.fg
-    }, o.status)), React.createElement("p", {
-      style: {
-        fontSize: 13,
-        color: "var(--ink)",
-        fontWeight: 700
-      }
-    }, o.shop), React.createElement("div", {
-      className: "flex items-center justify-between mt-1"
-    }, React.createElement("span", {
-      style: {
-        fontSize: 11.5,
-        color: "var(--muted)"
-      }
-    }, dt(o.date)), React.createElement("span", {
-      className: "font-mono-kz",
-      style: {
-        fontSize: 14,
-        color: "var(--ink)",
-        fontWeight: 700
-      }
-    }, money(o.total))), o.isDebt && React.createElement("div", {
-      className: "mt-1.5"
-    }, React.createElement(Badge, {
-      bg: "#FFF6DE",
-      fg: "#8A5A00"
-    }, "\u0412 \u0434\u043E\u043B\u0433")));
-  })), open && React.createElement(Modal, {
-    title: open.id,
-    onClose: () => setOpen(null)
-  }, React.createElement("p", {
-    style: {
-      fontSize: 12,
-      color: "var(--muted)",
-      marginBottom: 10
-    }
-  }, dt(open.date)), open.items.map((it, i) => React.createElement("div", {
-    key: i,
-    className: "flex justify-between py-2",
-    style: {
-      borderBottom: "1px dashed var(--line)",
-      fontSize: 13
-    }
-  }, React.createElement("span", null, it.n, " \xD7 ", it.qty), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontWeight: 700
-    }
-  }, money(it.price * it.qty)))), React.createElement("div", {
-    className: "flex justify-between pt-3"
-  }, React.createElement("span", {
-    style: {
-      fontWeight: 700
-    }
-  }, "\u0418\u0442\u043E\u0433\u043E"), React.createElement("span", {
-    className: "font-mono-kz",
-    style: {
-      fontWeight: 800,
-      fontSize: 16
-    }
-  }, money(open.total)))));
-}
-function AgentNav({
-  screen,
-  setScreen
-}) {
-  const items = [{
-    id: "stores",
-    icon: "store",
-    label: "Магазины"
-  }, {
-    id: "orders",
-    icon: "clipboard",
-    label: "Заказы"
-  }];
-  return React.createElement(AppNav, {
-    items: items,
-    active: screen,
-    onPick: setScreen,
-    spread: true,
-    brand: React.createElement(NavBrand, {
-      title: "Sapar Trade",
-      sub: "\u0422\u043E\u0440\u0433\u043E\u0432\u044B\u0439 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044C"
-    })
-  });
-}
-function AgentApp({
-  agent,
-  shared,
-  onExit
-}) {
-  const {
-    orders,
-    setOrders,
-    agentStores,
-    setAgentStores,
-    warehouse,
-    addAudit
-  } = shared;
-  const [screen, setScreen] = useState("stores");
-  const [activeStore, setActiveStore] = useState(null);
-  const [toast, setToast] = useState(null);
-  const showToast = m => {
-    setToast(m);
-    setTimeout(() => setToast(null), 2200);
-  };
-  const submitOrder = ({
-    items,
-    total,
-    isDebt,
-    payMethod
-  }) => {
-    const order = {
-      id: "KZ-" + Math.floor(260000 + Math.random() * 9999),
-      date: new Date(),
-      name: activeStore.name,
-      shop: activeStore.name,
-      items: items.map(it => ({
-        n: it.p.name,
-        price: it.p.price,
-        qty: it.qty
-      })),
-      total,
-      isDebt,
-      status: "В обработке",
-      type: "agent",
-      agentName: agent.name,
-      agentLogin: agent.login,
-      payMethod,
-      phone: activeStore.phone || "—",
-      address: activeStore.addr || "—"
-    };
-    setOrders([order, ...orders]);
-    addAudit(agent.name, "Заказ от торгового представителя", order.id, activeStore.name + " · " + money(total) + (isDebt ? " · в долг" : payMethod === "transfer" ? " · перевод" : " · наличные"));
-    showToast("Заказ отправлен в обработку ✓");
-    setActiveStore(null);
-    setScreen("orders");
-  };
-  return React.createElement("div", {
-    className: "relative h-full flex flex-col" + (activeStore ? "" : " kz-app"),
-    style: {
-      background: "var(--bg)"
-    }
-  }, React.createElement(StatusBar, null), React.createElement("div", {
-    className: "px-5 pb-2 flex items-center gap-2.5 kz-head"
-  }, React.createElement("div", {
-    className: "rounded-xl flex items-center justify-center",
-    style: {
-      width: 32,
-      height: 32,
-      background: "#fff",
-      border: "1px solid var(--line)"
-    }
-  }, React.createElement(Logo, {
-    size: 24
-  })), React.createElement("div", {
-    className: "flex-1"
-  }, React.createElement("p", {
-    className: "font-display",
-    style: {
-      fontSize: 14,
-      fontWeight: 800,
-      color: "var(--ink)"
-    }
-  }, agent.name), React.createElement("p", {
-    style: {
-      fontSize: 10,
-      color: "var(--muted)"
-    }
-  }, "\u0422\u043E\u0440\u0433\u043E\u0432\u044B\u0439 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044C")), React.createElement(LangSwitch, null), React.createElement("button", {
-    onClick: onExit,
-    className: "flex items-center gap-1 px-2.5 py-1.5 rounded-lg",
-    style: {
-      background: "#FCE7E6"
-    }
-  }, React.createElement(Ico, {
-    name: "arrow-left",
-    size: 13,
-    color: "var(--red)"
-  }), React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700,
-      color: "var(--red)"
-    }
-  }, "\u0412\u044B\u0445\u043E\u0434"))), React.createElement("div", {
-    className: "flex-1 flex flex-col overflow-hidden"
-  }, activeStore ? React.createElement(AgentStoreOrder, {
-    store: activeStore,
-    warehouse: warehouse,
-    onBack: () => setActiveStore(null),
-    onSubmitOrder: submitOrder
-  }) : React.createElement("div", {
-    className: "flex-1 overflow-y-auto pb-24 kz-main"
-  }, screen === "stores" ? React.createElement(AgentStores, {
-    agent: agent,
-    agentStores: agentStores,
-    setAgentStores: setAgentStores,
-    onOpenStore: setActiveStore,
-    addAudit: addAudit
-  }) : React.createElement(AgentOrders, {
-    agent: agent,
-    orders: orders
-  }))), !activeStore && React.createElement(AgentNav, {
-    screen: screen,
-    setScreen: setScreen
-  }), React.createElement(Toast, {
-    toast: toast
-  }));
 }
 const ST_API = ((document.querySelector('meta[name="st-api"]') || {}).content || "").replace(/\/$/, "");
 const stSession = {
@@ -7515,7 +4473,7 @@ async function stApi(path, {
   if (!res.ok) throw new StApiError(res.status, data && data.error || "Ошибка сервера (" + res.status + ")");
   return data;
 }
-function useLive(session, path, onAuthLost) {
+function useLive(session, path, onAuthLost, refreshMs) {
   const [state, setState] = useState({
     data: null,
     error: null,
@@ -7523,10 +4481,15 @@ function useLive(session, path, onAuthLost) {
   });
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!refreshMs) return undefined;
+    const t = setInterval(() => setTick(x => x + 1), refreshMs);
+    return () => clearInterval(t);
+  }, [refreshMs]);
+  useEffect(() => {
     let alive = true;
     setState(s => ({
       ...s,
-      loading: true,
+      loading: !s.data,
       error: null
     }));
     stApi(path, {
@@ -7835,11 +4798,30 @@ function LiveItem({
   }, valueSub)));
 }
 const liveCan = (session, ...perms) => perms.some(p => (session.perms || []).includes(p));
+const LOGIN_MODES = {
+  mgmt: {
+    title: "Система управления",
+    icon: "bar-chart",
+    allow: () => true
+  },
+  admin: {
+    title: "Администратор",
+    icon: "shield-check",
+    allow: perms => ["shift", "orders.manage", "orders.all"].some(x => perms.includes(x))
+  },
+  tp: {
+    title: "Торговый представитель",
+    icon: "users",
+    allow: perms => perms.includes("orders.create")
+  }
+};
 function LiveLogin({
   onCancel,
   onSuccess,
-  notice
+  notice,
+  mode = "mgmt"
 }) {
+  const M = LOGIN_MODES[mode] || LOGIN_MODES.mgmt;
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -7859,10 +4841,15 @@ function LiveLogin({
           password
         }
       });
+      if (!M.allow(r.perms || [])) {
+        setErr(`Для вашей роли раздел «${M.title}» недоступен. Войдите через «Система управления».`);
+        return;
+      }
       onSuccess({
         token: r.token,
         user: r.user,
-        perms: r.perms
+        perms: r.perms,
+        mode
       });
     } catch (e) {
       setErr(e.message);
@@ -7894,7 +4881,7 @@ function LiveLogin({
       background: "var(--navy)"
     }
   }, React.createElement(Ico, {
-    name: "bar-chart",
+    name: M.icon,
     size: 28,
     color: "#fff"
   })), React.createElement("h1", {
@@ -7904,7 +4891,7 @@ function LiveLogin({
       fontWeight: 800,
       color: "var(--ink)"
     }
-  }, "\u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F"), React.createElement("p", {
+  }, M.title), React.createElement("p", {
     className: "text-center",
     style: {
       fontSize: 12.5,
@@ -9885,6 +6872,1004 @@ function MgmtApp({
     toast: toast
   }));
 }
+const ORDER_FILTERS = [["new", "Новые", ["Новый"]], ["work", "В работе", ["Принят", "Собран"]], ["done", "Отгружены", ["Отгружен"]], ["cancel", "Отменённые", ["Отменён"]], ["all", "Все", null]];
+const ORDER_ACTIONS = {
+  "Новый": [["Принят", "Принять"], ["Отменён", "Отменить"]],
+  "Принят": [["Собран", "Собран"], ["Отменён", "Отменить"]],
+  "Собран": [["Отгружен", "Отгружен"], ["Отменён", "Отменить"]]
+};
+const ORDER_COLORS = {
+  "Новый": ["#EEF0FF", "var(--navy)"],
+  "Принят": ["#FFF6DE", "#8A5A00"],
+  "Собран": ["#FFF6DE", "#8A5A00"],
+  "Отгружен": ["#E4F7E9", "#127A33"],
+  "Отменён": ["#F2F1F8", "var(--muted)"]
+};
+function Order1C({
+  o
+}) {
+  if (o.onec_status === "sent") return React.createElement(Badge, {
+    bg: "#E4F7E9",
+    fg: "#127A33"
+  }, "1\u0421: ", o.onec_number || "создан");
+  if (o.onec_status === "error") return React.createElement(Badge, {
+    bg: "#FCE7E6",
+    fg: "#B3261E"
+  }, "\u043E\u0448\u0438\u0431\u043A\u0430 1\u0421");
+  if (o.onec_status === "pending") return React.createElement(Badge, {
+    bg: "#F2F1F8",
+    fg: "var(--muted)"
+  }, "\u0436\u0434\u0451\u0442 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0438 \u0432 1\u0421");
+  return null;
+}
+function OrdersBoard({
+  session,
+  authLost,
+  showToast,
+  defaultFilter = "new",
+  title
+}) {
+  const [filter, setFilter] = useState(defaultFilter);
+  const [open, setOpen] = useState(null);
+  const r = useLive(session, "/api/orders", authLost, 30000);
+  const all = r.data || [];
+  const f = ORDER_FILTERS.find(x => x[0] === filter);
+  const list = f[2] ? all.filter(o => f[2].includes(o.status)) : all;
+  const count = st => all.filter(o => st.includes(o.status)).length;
+  const canManage = liveCan(session, "orders.manage");
+  const act = async (o, status) => {
+    if (status === "Отменён" && !window.confirm(`Отменить заказ ${o.number}?`)) return;
+    try {
+      const res = await stApi("/api/orders/" + o.id, {
+        method: "PATCH",
+        token: session.token,
+        body: {
+          status
+        }
+      });
+      showToast(res.note || `${o.number}: ${status}`);
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const retry = async o => {
+    try {
+      await stApi("/api/orders/" + o.id + "/retry-1c", {
+        method: "POST",
+        token: session.token
+      });
+      showToast("Отправим в 1С ещё раз");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  return React.createElement(React.Fragment, null, title, React.createElement("div", {
+    className: "flex gap-1.5 mb-3 overflow-x-auto pb-1"
+  }, ORDER_FILTERS.map(([id, l, st]) => React.createElement(LiveChip, {
+    key: id,
+    on: filter === id,
+    onClick: () => setFilter(id)
+  }, l, st && count(st) ? " · " + count(st) : ""))), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: r.data && !list.length ? "Заказов нет" : null
+  })), React.createElement("div", {
+    className: "kz-list"
+  }, list.map(o => {
+    const [bg, fg] = ORDER_COLORS[o.status];
+    const mineNew = o.status === "Новый" && o.created_by === session.user.id;
+    const actions = (ORDER_ACTIONS[o.status] || []).filter(([st]) => canManage || mineNew && st === "Отменён");
+    return React.createElement(MgCard, {
+      key: o.id
+    }, React.createElement("div", {
+      onClick: () => setOpen(open === o.id ? null : o.id),
+      style: {
+        cursor: "pointer"
+      }
+    }, React.createElement("div", {
+      className: "flex items-start gap-2"
+    }, React.createElement("div", {
+      className: "flex-1 min-w-0"
+    }, React.createElement("p", {
+      style: {
+        fontSize: 13.5,
+        fontWeight: 800
+      }
+    }, o.client_name), React.createElement("p", {
+      style: {
+        fontSize: 11,
+        color: "var(--muted)"
+      }
+    }, o.number, " \xB7 ", stFmtTime(o.created_at), " \xB7 ", o.creator, o.manager && o.manager !== o.creator ? " · ТП " + o.manager : "")), React.createElement("div", {
+      className: "text-right shrink-0"
+    }, React.createElement("p", {
+      className: "font-mono-kz",
+      style: {
+        fontSize: 14,
+        fontWeight: 800
+      }
+    }, stMoney(o.total)), React.createElement(Badge, {
+      bg: bg,
+      fg: fg
+    }, o.status))), React.createElement("div", {
+      className: "flex gap-1.5 mt-1.5 flex-wrap items-center"
+    }, React.createElement(Order1C, {
+      o: o
+    }), React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "var(--muted)"
+      }
+    }, (o.items || []).length, " \u043F\u043E\u0437.", o.delivery_date ? " · доставка " + stFmtDate(o.delivery_date) : ""))), open === o.id && React.createElement("div", {
+      className: "mt-2 pt-2",
+      style: {
+        borderTop: "1px dashed var(--line)"
+      }
+    }, (o.items || []).map((it, i) => React.createElement("div", {
+      key: i,
+      className: "flex justify-between gap-2 py-1",
+      style: {
+        fontSize: 12.5
+      }
+    }, React.createElement("span", {
+      className: "flex-1"
+    }, it.name), React.createElement("span", {
+      className: "font-mono-kz",
+      style: {
+        color: "var(--muted)"
+      }
+    }, stNum(it.qty), " ", it.unit || "", " \xD7 ", stNum(it.price)), React.createElement("span", {
+      className: "font-mono-kz",
+      style: {
+        fontWeight: 700,
+        minWidth: 90,
+        textAlign: "right"
+      }
+    }, stMoney(it.sum)))), o.comment && React.createElement("p", {
+      style: {
+        fontSize: 12,
+        marginTop: 6
+      }
+    }, "\uD83D\uDCAC ", o.comment), o.onec_status === "error" && React.createElement("p", {
+      style: {
+        fontSize: 11.5,
+        color: "#B3261E",
+        marginTop: 6
+      }
+    }, "\u041E\u0448\u0438\u0431\u043A\u0430 1\u0421: ", o.onec_error), (o.events || []).length > 0 && React.createElement("div", {
+      className: "mt-2"
+    }, (o.events || []).map((e, i) => React.createElement("p", {
+      key: i,
+      style: {
+        fontSize: 10.5,
+        color: "var(--muted)"
+      }
+    }, stFmtTime(e.at), " \xB7 ", e.event, e.user ? " · " + e.user : "", e.note ? " — " + e.note : ""))), React.createElement("div", {
+      className: "flex gap-1.5 flex-wrap mt-2"
+    }, actions.map(([st, label]) => React.createElement(GhostButton, {
+      key: st,
+      small: true,
+      onClick: () => act(o, st)
+    }, label)), canManage && o.onec_status === "error" && React.createElement(GhostButton, {
+      small: true,
+      onClick: () => retry(o)
+    }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0432 1\u0421 \u0435\u0449\u0451 \u0440\u0430\u0437"))));
+  })));
+}
+const shiftHM = ts => new Date(ts).toLocaleTimeString("ru-RU", {
+  timeZone: ST_TZ,
+  hour: "2-digit",
+  minute: "2-digit"
+});
+const shiftLen = (a, b) => {
+  const m = Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
+  return (Math.floor(m / 60) ? Math.floor(m / 60) + " ч " : "") + m % 60 + " мин";
+};
+function shiftReportText(r) {
+  const L = [],
+    o = r.orders,
+    s = r.sales1c;
+  L.push("*ОТЧЁТ ЗА СМЕНУ — ИП «Sapar Trade»*");
+  L.push("Дата: " + stFmtDate(r.day));
+  L.push("Смена: " + shiftHM(r.from) + " — " + shiftHM(r.to) + "  (" + shiftLen(r.from, r.to) + ")");
+  L.push("Администратор: " + r.adminName);
+  L.push("");
+  L.push("🧾 *ЗАКАЗЫ В ПРИЛОЖЕНИИ: " + o.count + "*");
+  L.push("Сумма: " + stMoney(o.total) + (o.avg ? " · средний " + stMoney(o.avg) : ""));
+  L.push("• Отгружено: " + o.shipped + " · в работе: " + o.inWork + " · отменено: " + o.cancelled);
+  L.push("• Создано в 1С: " + o.in1c + (o.err1c ? " · ошибок 1С: " + o.err1c : ""));
+  if (o.byTp.length) {
+    L.push("");
+    L.push("👤 *ПО ТОРГОВЫМ ПРЕДСТАВИТЕЛЯМ*");
+    o.byTp.forEach(t => L.push("• " + t.manager + " — " + t.n + " зак. · " + stMoney(t.total)));
+  }
+  L.push("");
+  L.push("💰 *ПРОДАЖИ ЗА ДЕНЬ ПО 1С*");
+  L.push("Выручка: " + stMoney(s.revenue) + " · покупателей: " + s.clients);
+  if (s.lastSync) L.push("Данные 1С на " + stFmtTime(s.lastSync));
+  if (s.top.length) {
+    L.push("");
+    L.push("📦 *ТОП ТОВАРОВ ДНЯ*");
+    s.top.forEach((t, i) => L.push(i + 1 + ". " + t.name + " — " + stNum(t.qty) + " · " + stMoney(t.sum)));
+  }
+  if (r.debts.overdue > 0) {
+    L.push("");
+    L.push("⏰ *ПРОСРОЧЕННЫЕ ДОЛГИ*: " + stMoney(r.debts.overdue) + " (" + r.debts.clients + " клиентов)");
+  }
+  if (r.lowStock.length) {
+    L.push("");
+    L.push("⚠️ *ЗАКАНЧИВАЕТСЯ НА СКЛАДЕ*");
+    r.lowStock.forEach(p => L.push("• " + p.name + " — " + stNum(p.stock) + " " + (p.unit || "") + (p.daysLeft !== null ? " (≈" + p.daysLeft + " дн.)" : "")));
+  }
+  L.push("");
+  L.push("Отчёт сформирован автоматически: " + stFmtTime(r.to));
+  return L.join("\n");
+}
+function shiftWhatsAppUrl(phone, text) {
+  const body = CUR_LANG === "kk" ? text.split("\n").map(trKK).join("\n") : text;
+  return "https://wa.me/" + String(phone || "").replace(/\D/g, "") + "?text=" + encodeURIComponent(body);
+}
+function AdminShiftLive({
+  session,
+  authLost,
+  showToast
+}) {
+  const r = useLive(session, "/api/shift", authLost);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+  if (!r.data) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  const {
+    current,
+    history,
+    settings
+  } = r.data;
+  const start = async () => {
+    setBusy(true);
+    try {
+      await stApi("/api/shift/start", {
+        method: "POST",
+        token: session.token
+      });
+      showToast("Смена начата");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+    setBusy(false);
+  };
+  const end = async () => {
+    if (!window.confirm("Завершить смену и сформировать отчёт?")) return;
+    setBusy(true);
+    try {
+      const res = await stApi("/api/shift/end", {
+        method: "POST",
+        token: session.token
+      });
+      setReport({
+        r: res.report,
+        phone: res.settings.directorPhone
+      });
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+    setBusy(false);
+  };
+  return React.createElement(React.Fragment, null, React.createElement(MgCard, {
+    style: {
+      textAlign: "center",
+      padding: 22
+    }
+  }, current ? React.createElement(React.Fragment, null, React.createElement(Badge, {
+    bg: "#E4F7E9",
+    fg: "#127A33"
+  }, "\u0441\u043C\u0435\u043D\u0430 \u0438\u0434\u0451\u0442"), React.createElement("p", {
+    className: "font-display",
+    style: {
+      fontSize: 22,
+      fontWeight: 800,
+      margin: "10px 0 2px"
+    }
+  }, shiftLen(current.started_at, now)), React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginBottom: 14
+    }
+  }, "\u043D\u0430\u0447\u0430\u0442\u0430 \u0432 ", shiftHM(current.started_at)), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy,
+    onClick: end
+  }, busy ? "Формируем отчёт…" : "Завершить работу"), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 8
+    }
+  }, "\u041E\u0442\u0447\u0451\u0442 \u0437\u0430 \u0441\u043C\u0435\u043D\u0443 \u0443\u0439\u0434\u0451\u0442 \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0443 (", settings.directorPhone, ") \u0432 WhatsApp")) : React.createElement(React.Fragment, null, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: "var(--muted)",
+      marginBottom: 14
+    }
+  }, "\u0421\u043C\u0435\u043D\u0430 \u043D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430"), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy,
+    onClick: start
+  }, "\u041D\u0430\u0447\u0430\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443"))), history.length > 0 && React.createElement(React.Fragment, null, React.createElement(MgLabel, null, "\u041F\u0440\u043E\u0448\u043B\u044B\u0435 \u0441\u043C\u0435\u043D\u044B"), React.createElement(MgCard, null, history.map(h => React.createElement("div", {
+    key: h.id,
+    onClick: () => setReport({
+      r: h.report,
+      phone: settings.directorPhone
+    }),
+    style: {
+      cursor: "pointer"
+    }
+  }, React.createElement(LiveItem, {
+    title: stFmtDate(h.report ? h.report.day : String(h.started_at).slice(0, 10)) + " · " + shiftHM(h.started_at) + "–" + shiftHM(h.ended_at),
+    sub: h.report ? h.report.orders.count + " заказов · 1С " + shortMoney(h.report.sales1c.revenue) : "",
+    value: "\u043E\u0442\u0447\u0451\u0442 \u203A"
+  }))))), report && report.r && React.createElement(Modal, {
+    title: "\u041E\u0442\u0447\u0451\u0442 \u0437\u0430 \u0441\u043C\u0435\u043D\u0443",
+    onClose: () => setReport(null),
+    wide: true
+  }, React.createElement("pre", {
+    style: {
+      whiteSpace: "pre-wrap",
+      fontFamily: "inherit",
+      fontSize: 12.5,
+      lineHeight: 1.5,
+      background: "#F6F5FA",
+      borderRadius: 14,
+      padding: 12
+    }
+  }, shiftReportText(report.r)), React.createElement("div", {
+    className: "mt-3"
+  }, React.createElement(PrimaryButton, {
+    full: true,
+    onClick: () => window.open(shiftWhatsAppUrl(report.phone, shiftReportText(report.r)), "_blank")
+  }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0443 \u0432 WhatsApp")), React.createElement("div", {
+    className: "mt-2"
+  }, React.createElement(GhostButton, {
+    full: true,
+    onClick: () => {
+      navigator.clipboard && navigator.clipboard.writeText(shiftReportText(report.r));
+      showToast("Текст скопирован");
+    }
+  }, "\u0421\u043A\u043E\u043F\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442"))));
+}
+function AdminSettingsLive({
+  session,
+  authLost,
+  showToast
+}) {
+  const r = useLive(session, "/api/settings", authLost);
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    if (r.data) setPhone(r.data.directorPhone);
+  }, [r.data]);
+  if (!r.data) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  const save = async () => {
+    try {
+      const s = await stApi("/api/settings", {
+        method: "PUT",
+        token: session.token,
+        body: {
+          directorPhone: phone
+        }
+      });
+      setPhone(s.directorPhone);
+      showToast("Сохранено");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  return React.createElement(MgCard, null, React.createElement(Field, {
+    label: "WhatsApp \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0430 (\u0434\u043B\u044F \u043E\u0442\u0447\u0451\u0442\u0430 \u0441\u043C\u0435\u043D\u044B)",
+    value: phone,
+    inputMode: "tel",
+    onChange: e => setPhone(e.target.value)
+  }), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: !liveCan(session, "settings"),
+    onClick: save
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"));
+}
+const ADMIN_TABS = {
+  shift: ["power", "Смена"],
+  orders: ["clipboard", "Заказы"],
+  stock: ["package", "Склад"],
+  staff: ["users", "Сотрудники"],
+  settings: ["settings", "Настройки"]
+};
+function adminTabsFor(session) {
+  const can = (...p) => liveCan(session, ...p);
+  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("settings") && "settings"].filter(Boolean);
+}
+function AdminLiveApp({
+  session,
+  setSession,
+  onExit
+}) {
+  const tabs = adminTabsFor(session);
+  const [tab, setTab] = useState(tabs[0]);
+  const [toast, setToast] = useState(null);
+  const [pwd, setPwd] = useState(false);
+  const showToast = m => {
+    setToast(m);
+    setTimeout(() => setToast(null), 2400);
+  };
+  const authLost = msg => onExit(msg || "Сессия завершена, войдите снова");
+  const p = {
+    session,
+    authLost,
+    showToast,
+    go: () => {},
+    param: null,
+    setParam: () => {}
+  };
+  return React.createElement("div", {
+    className: "relative h-full flex flex-col kz-app",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "px-5 pb-2 flex items-center gap-2 kz-head"
+  }, React.createElement("div", {
+    className: "rounded-xl flex items-center justify-center shrink-0",
+    style: {
+      width: 32,
+      height: 32,
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement(Logo, {
+    size: 24
+  })), React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    className: "font-display truncate",
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, ADMIN_TABS[tab][1]), React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 10,
+      color: "var(--muted)"
+    }
+  }, session.user.name, " \xB7 ", LIVE_ROLES[session.user.role] || session.user.role)), React.createElement(LangSwitch, null), React.createElement("button", {
+    onClick: () => setPwd(true),
+    title: "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0430\u0440\u043E\u043B\u044C",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "settings",
+    size: 15
+  })), React.createElement("button", {
+    onClick: () => onExit(),
+    title: "\u0412\u044B\u0439\u0442\u0438",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#FCE7E6"
+    }
+  }, React.createElement(Ico, {
+    name: "log-out",
+    size: 15,
+    color: "var(--red)"
+  }))), React.createElement("div", {
+    className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
+  }, tab === "shift" && React.createElement(AdminShiftLive, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "stock" && React.createElement(MgStock, p), tab === "staff" && React.createElement(LiveUsers, p), tab === "settings" && React.createElement(AdminSettingsLive, p)), React.createElement(AppNav, {
+    items: tabs.map(id => ({
+      id,
+      icon: ADMIN_TABS[id][0],
+      label: ADMIN_TABS[id][1]
+    })),
+    active: tab,
+    onPick: setTab,
+    spread: tabs.length <= 5,
+    brand: React.createElement(NavBrand, {
+      title: "Sapar Trade",
+      sub: "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440"
+    })
+  }), pwd && React.createElement(LivePasswordModal, {
+    session: session,
+    onClose: () => setPwd(false),
+    onChanged: token => {
+      setSession({
+        ...session,
+        token
+      });
+      setPwd(false);
+      showToast("Пароль изменён");
+    }
+  }), React.createElement(Toast, {
+    toast: toast
+  }));
+}
+function TpStores({
+  session,
+  authLost,
+  onOrder
+}) {
+  const [q, setQ] = useState("");
+  const [debtors, setDebtors] = useState(false);
+  const dq = useDebounced(q);
+  const t = stToday();
+  const r = useLive(session, "/api/clients?" + stQs({
+    from: t.slice(0, 8) + "01",
+    to: t,
+    q: dq,
+    debtors,
+    limit: 500
+  }), authLost);
+  const d = r.data;
+  return React.createElement(React.Fragment, null, d && React.createElement(LiveFreshness, {
+    lastSync: d.lastSync,
+    stale: d.stale
+  }), React.createElement(LiveSearch, {
+    value: q,
+    onChange: setQ,
+    placeholder: "\u041C\u0430\u0433\u0430\u0437\u0438\u043D, \u0442\u0435\u043B\u0435\u0444\u043E\u043D \u0438\u043B\u0438 \u043A\u043E\u0434"
+  }), React.createElement("div", {
+    className: "flex gap-1.5 mb-3"
+  }, React.createElement(LiveChip, {
+    on: !debtors,
+    onClick: () => setDebtors(false)
+  }, "\u0412\u0441\u0435", d ? " · " + d.summary.clients : ""), React.createElement(LiveChip, {
+    on: debtors,
+    onClick: () => setDebtors(true)
+  }, "\u0421 \u0434\u043E\u043B\u0433\u043E\u043C")), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: d && !d.items.length ? "Магазинов нет. Ваши клиенты определяются по 1С (торговый представитель в документах продаж)." : null
+  })), d && d.items.length > 0 && React.createElement("div", {
+    className: "kz-list"
+  }, d.items.map(x => React.createElement(MgCard, {
+    key: x.code,
+    onClick: () => onOrder(x)
+  }, React.createElement("div", {
+    className: "flex items-start gap-2"
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, x.name), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, [x.address, x.phone].filter(Boolean).join(" · ") || "—"), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, x.lastSale ? "посл. покупка " + stFmtDate(x.lastSale) : "покупок нет")), React.createElement("div", {
+    className: "text-right shrink-0"
+  }, x.debt > 0 && React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: x.overdue > 0 ? "var(--red)" : "var(--ink)"
+    }
+  }, "\u0434\u043E\u043B\u0433 ", shortMoney(x.debt)), x.overdue > 0 && React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--red)"
+    }
+  }, "\u043F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E ", shortMoney(x.overdue)), React.createElement("span", {
+    className: "inline-block mt-1 px-2.5 py-1 rounded-full",
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      background: "var(--navy)",
+      color: "#fff"
+    }
+  }, "\u0417\u0430\u043A\u0430\u0437 \u203A")))))));
+}
+function TpOrder({
+  session,
+  authLost,
+  store,
+  catalog,
+  onBack,
+  onDone,
+  showToast
+}) {
+  const [q, setQ] = useState("");
+  const [grp, setGrp] = useState("");
+  const [cart, setCart] = useState({});
+  const [confirm, setConfirm] = useState(false);
+  const [comment, setComment] = useState("");
+  const [delivery, setDelivery] = useState(stShift(stToday(), 1));
+  const [busy, setBusy] = useState(false);
+  const dq = useDebounced(q, 250);
+  if (!catalog.data) return React.createElement(LiveState, _extends({}, catalog, {
+    onRetry: catalog.reload
+  }));
+  const items = catalog.data.items;
+  const byCode = Object.fromEntries(items.map(x => [x.code, x]));
+  const needle = dq.trim().toLowerCase();
+  const shown = items.filter(x => (!grp || x.grp === grp) && (!needle || x.name.toLowerCase().includes(needle) || (x.sku || "").toLowerCase().includes(needle))).slice(0, 150);
+  const lines = Object.entries(cart).filter(([, n]) => n > 0).map(([code, n]) => ({
+    ...byCode[code],
+    qty: n,
+    sum: n * (byCode[code].price || 0)
+  }));
+  const total = lines.reduce((a, l) => a + l.sum, 0);
+  const setQty = (code, n) => setCart(c => ({
+    ...c,
+    [code]: Math.max(0, Math.round(n * 1000) / 1000)
+  }));
+  const send = async () => {
+    setBusy(true);
+    try {
+      const res = await stApi("/api/orders", {
+        method: "POST",
+        token: session.token,
+        body: {
+          clientCode: store.code,
+          items: lines.map(l => ({
+            code: l.code,
+            qty: l.qty
+          })),
+          comment,
+          deliveryDate: delivery
+        }
+      });
+      showToast(`Заказ ${res.number} отправлен · ${stMoney(res.total)}`);
+      onDone();
+    } catch (e) {
+      showToast(e.message);
+    }
+    setBusy(false);
+  };
+  return React.createElement(React.Fragment, null, React.createElement("button", {
+    onClick: onBack,
+    className: "flex items-center gap-1 mb-2",
+    style: {
+      fontSize: 12.5,
+      color: "var(--navy)",
+      fontWeight: 700
+    }
+  }, React.createElement(Ico, {
+    name: "arrow-left",
+    size: 14
+  }), "\u041C\u043E\u0438 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u044B"), React.createElement(MgCard, null, React.createElement("p", {
+    style: {
+      fontSize: 14,
+      fontWeight: 800
+    }
+  }, store.name), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, store.address || "", store.debt > 0 ? " · долг " + stMoney(store.debt) : ""), React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 2
+    }
+  }, "\u0426\u0435\u043D\u044B: \xAB", catalog.data.priceType, "\xBB \xB7 \u043E\u0441\u0442\u0430\u0442\u043A\u0438 \u0438\u0437 1\u0421")), React.createElement(LiveSearch, {
+    value: q,
+    onChange: setQ,
+    placeholder: "\u041F\u043E\u0438\u0441\u043A \u0442\u043E\u0432\u0430\u0440\u0430"
+  }), React.createElement("div", {
+    className: "flex gap-1.5 mb-3 overflow-x-auto pb-1"
+  }, React.createElement(LiveChip, {
+    on: !grp,
+    onClick: () => setGrp("")
+  }, "\u0412\u0441\u0435"), catalog.data.groups.map(g => React.createElement(LiveChip, {
+    key: g,
+    on: grp === g,
+    onClick: () => setGrp(g)
+  }, g))), React.createElement(MgCard, null, shown.map(x => {
+    const n = cart[x.code] || 0;
+    const noPrice = !(x.price > 0);
+    return React.createElement("div", {
+      key: x.code,
+      className: "flex items-center gap-2 py-2",
+      style: {
+        borderBottom: "1px solid var(--line)",
+        opacity: noPrice ? 0.5 : 1
+      }
+    }, React.createElement("div", {
+      className: "flex-1 min-w-0"
+    }, React.createElement("p", {
+      style: {
+        fontSize: 12.5,
+        fontWeight: 700
+      }
+    }, x.name), React.createElement("p", {
+      className: "font-mono-kz",
+      style: {
+        fontSize: 11,
+        color: "var(--muted)"
+      }
+    }, noPrice ? "нет цены" : stMoney(x.price), " \xB7 \u043E\u0441\u0442\u0430\u0442\u043E\u043A ", React.createElement("span", {
+      style: {
+        color: x.stock > 0 ? "var(--muted)" : "var(--red)"
+      }
+    }, stNum(x.stock), " ", x.unit || ""))), !noPrice && React.createElement("div", {
+      className: "flex items-center gap-1 shrink-0"
+    }, n > 0 && React.createElement("button", {
+      onClick: () => setQty(x.code, n - 1),
+      className: "rounded-full flex items-center justify-center",
+      style: {
+        width: 30,
+        height: 30,
+        background: "#F2F1F8"
+      }
+    }, React.createElement(Ico, {
+      name: "minus",
+      size: 14
+    })), n > 0 && React.createElement("input", {
+      inputMode: "decimal",
+      value: n,
+      onChange: e => setQty(x.code, Number(e.target.value.replace(",", ".")) || 0),
+      className: "font-mono-kz text-center rounded-lg",
+      style: {
+        width: 46,
+        padding: "4px 2px",
+        border: "1px solid var(--line)",
+        fontSize: 13
+      }
+    }), React.createElement("button", {
+      onClick: () => setQty(x.code, n + 1),
+      className: "rounded-full flex items-center justify-center",
+      style: {
+        width: 30,
+        height: 30,
+        background: "var(--navy)"
+      }
+    }, React.createElement(Ico, {
+      name: "plus",
+      size: 14,
+      color: "#fff"
+    }))));
+  }), !shown.length && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    }
+  }, "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E"), shown.length === 150 && React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 6
+    }
+  }, "\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u044B \u043F\u0435\u0440\u0432\u044B\u0435 150 \u2014 \u0443\u0442\u043E\u0447\u043D\u0438\u0442\u0435 \u043F\u043E\u0438\u0441\u043A")), lines.length > 0 && React.createElement("div", {
+    className: "sticky bottom-2 mt-2"
+  }, React.createElement("button", {
+    onClick: () => setConfirm(true),
+    className: "w-full rounded-2xl px-4 py-3.5 flex items-center justify-between",
+    style: {
+      background: "var(--navy)",
+      color: "#fff",
+      boxShadow: "0 8px 24px rgba(27,20,100,.25)"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, lines.length, " \u043F\u043E\u0437. \xB7 \u043E\u0444\u043E\u0440\u043C\u0438\u0442\u044C"), React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 15,
+      fontWeight: 800
+    }
+  }, stMoney(total)))), confirm && React.createElement(Modal, {
+    title: "\u0417\u0430\u043A\u0430\u0437",
+    onClose: () => setConfirm(false),
+    wide: true
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      marginBottom: 6
+    }
+  }, store.name), lines.map(l => React.createElement("div", {
+    key: l.code,
+    className: "flex justify-between gap-2 py-1",
+    style: {
+      fontSize: 12.5
+    }
+  }, React.createElement("span", {
+    className: "flex-1"
+  }, l.name, l.qty > l.stock ? React.createElement("span", {
+    style: {
+      color: "var(--red)"
+    }
+  }, " \xB7 \u0431\u043E\u043B\u044C\u0448\u0435 \u043E\u0441\u0442\u0430\u0442\u043A\u0430") : null), React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      color: "var(--muted)"
+    }
+  }, stNum(l.qty), " \xD7 ", stNum(l.price)), React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      fontWeight: 700,
+      minWidth: 90,
+      textAlign: "right"
+    }
+  }, stMoney(l.sum)))), React.createElement(MgRow, {
+    l: "\u0418\u0442\u043E\u0433\u043E",
+    v: stMoney(total),
+    strong: true
+  }), React.createElement("div", {
+    className: "mt-3"
+  }), React.createElement(Field, {
+    label: "\u0414\u043E\u0441\u0442\u0430\u0432\u043A\u0430",
+    type: "date",
+    value: delivery,
+    onChange: e => setDelivery(e.target.value)
+  }), React.createElement(Field, {
+    label: "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439",
+    value: comment,
+    onChange: e => setComment(e.target.value),
+    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0434\u043E \u043E\u0431\u0435\u0434\u0430"
+  }), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy,
+    onClick: send
+  }, busy ? "Отправляем…" : "Отправить заказ"), React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 8
+    }
+  }, "\u0417\u0430\u043A\u0430\u0437 \u043F\u043E\u043F\u0430\u0434\u0451\u0442 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0443 \u0438 \u0432 1\u0421 (\u0440\u0435\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u044F, \u043D\u0435\u043F\u0440\u043E\u0432\u0435\u0434\u0451\u043D\u043D\u0430\u044F \u2014 \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 \u0438 \u043F\u0440\u043E\u0432\u0435\u0434\u0451\u0442).")));
+}
+const TP_TABS = {
+  stores: ["store", "Магазины"],
+  orders: ["clipboard", "Мои заказы"],
+  plan: ["trending-up", "Мой план"]
+};
+function TpApp({
+  session,
+  setSession,
+  onExit
+}) {
+  const [tab, setTab] = useState("stores");
+  const [store, setStore] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [pwd, setPwd] = useState(false);
+  const showToast = m => {
+    setToast(m);
+    setTimeout(() => setToast(null), 2600);
+  };
+  const authLost = msg => onExit(msg || "Сессия завершена, войдите снова");
+  const catalog = useLive(session, "/api/catalog", authLost);
+  const t = stToday();
+  const p = {
+    session,
+    authLost,
+    showToast,
+    go: () => {},
+    param: null,
+    setParam: () => {}
+  };
+  const pick = id => {
+    setStore(null);
+    setTab(id);
+  };
+  return React.createElement("div", {
+    className: "relative h-full flex flex-col kz-app",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "px-5 pb-2 flex items-center gap-2 kz-head"
+  }, React.createElement("div", {
+    className: "rounded-xl flex items-center justify-center shrink-0",
+    style: {
+      width: 32,
+      height: 32,
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement(Logo, {
+    size: 24
+  })), React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    className: "font-display truncate",
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, store ? "Заказ" : TP_TABS[tab][1]), React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 10,
+      color: "var(--muted)"
+    }
+  }, session.user.name, " \xB7 ", LIVE_ROLES[session.user.role] || session.user.role)), React.createElement(LangSwitch, null), React.createElement("button", {
+    onClick: () => setPwd(true),
+    title: "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0430\u0440\u043E\u043B\u044C",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "settings",
+    size: 15
+  })), React.createElement("button", {
+    onClick: () => onExit(),
+    title: "\u0412\u044B\u0439\u0442\u0438",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#FCE7E6"
+    }
+  }, React.createElement(Ico, {
+    name: "log-out",
+    size: 15,
+    color: "var(--red)"
+  }))), React.createElement("div", {
+    className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
+  }, tab === "stores" && !store && React.createElement(TpStores, _extends({}, p, {
+    onOrder: setStore
+  })), tab === "stores" && store && React.createElement(TpOrder, _extends({}, p, {
+    store: store,
+    catalog: catalog,
+    onBack: () => setStore(null),
+    onDone: () => {
+      setStore(null);
+      setTab("orders");
+    }
+  })), tab === "orders" && React.createElement(OrdersBoard, _extends({}, p, {
+    defaultFilter: "all"
+  })), tab === "plan" && React.createElement(MgTeam, _extends({}, p, {
+    range: {
+      from: t.slice(0, 8) + "01",
+      to: t
+    }
+  }))), React.createElement(AppNav, {
+    items: Object.entries(TP_TABS).map(([id, [icon, label]]) => ({
+      id,
+      icon,
+      label
+    })),
+    active: store ? "stores" : tab,
+    onPick: pick,
+    spread: true,
+    brand: React.createElement(NavBrand, {
+      title: "Sapar Trade",
+      sub: "\u0422\u043E\u0440\u0433\u043E\u0432\u044B\u0439 \u043F\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043B\u044C"
+    })
+  }), pwd && React.createElement(LivePasswordModal, {
+    session: session,
+    onClose: () => setPwd(false),
+    onChanged: token => {
+      setSession({
+        ...session,
+        token
+      });
+      setPwd(false);
+      showToast("Пароль изменён");
+    }
+  }), React.createElement(Toast, {
+    toast: toast
+  }));
+}
 function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = v => {
@@ -9892,10 +7877,10 @@ function App() {
     setLiveSessionState(v);
   };
   const [liveNotice, setLiveNotice] = useState("");
+  const [loginMode, setLoginMode] = useState("mgmt");
   const clientMode = location.hash === "#client";
   const HOME = clientMode ? "client" : "staffChoice";
   const [view, setView] = useState(() => stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME);
-  const [loggedAgent, setLoggedAgent] = useState(null);
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
   const [profile, setProfile] = useState({
@@ -9917,11 +7902,6 @@ function App() {
     reward: 5000
   });
   const [bonusRedeemedMonth, setBonusRedeemedMonth] = useState(null);
-  const [agents, setAgents] = useState(AGENTS_SEED);
-  const [agentStores, setAgentStores] = useState([]);
-  const [shift, setShift] = useState(null);
-  const [shiftHistory, setShiftHistory] = useState([]);
-  const [directorPhone, setDirectorPhone] = useState(DIRECTOR_PHONE_DEFAULT);
   const addAudit = (user, action, obj, detail) => {
     setAuditLog(prev => [{
       t: "только что",
@@ -9968,17 +7948,7 @@ function App() {
     cashback,
     setCashback,
     bonusRedeemedMonth,
-    setBonusRedeemedMonth,
-    agents,
-    setAgents,
-    agentStores,
-    setAgentStores,
-    shift,
-    setShift,
-    shiftHistory,
-    setShiftHistory,
-    directorPhone,
-    setDirectorPhone
+    setBonusRedeemedMonth
   };
   return React.createElement(LangCtx.Provider, {
     value: {
@@ -10008,8 +7978,12 @@ function App() {
     onAdminTrigger: () => setView("staffChoice")
   }), view === "staffChoice" && React.createElement(StaffGate, {
     onCancel: clientMode ? () => setView("client") : null,
-    onPick: role => setView(role === "admin" ? "adminLogin" : role === "live" ? "liveLogin" : "agentLogin")
+    onPick: mode => {
+      setLoginMode(mode);
+      setView("liveLogin");
+    }
   }), view === "liveLogin" && React.createElement(LiveLogin, {
+    mode: loginMode,
     notice: liveNotice,
     onCancel: () => setView("staffChoice"),
     onSuccess: s => {
@@ -10017,35 +7991,20 @@ function App() {
       setLiveSession(s);
       setView("live");
     }
-  }), view === "live" && liveSession && React.createElement(MgmtApp, {
-    session: liveSession,
-    setSession: setLiveSession,
-    onExit: msg => {
+  }), view === "live" && liveSession && (() => {
+    const exit = msg => {
+      setLoginMode(liveSession.mode || "mgmt");
       setLiveSession(null);
       setLiveNotice(msg || "");
       setView(msg ? "liveLogin" : HOME);
-    }
-  }), view === "adminLogin" && React.createElement(AdminLogin, {
-    onCancel: () => setView("staffChoice"),
-    onSuccess: () => setView("admin")
-  }), view === "admin" && React.createElement(AdminApp, {
-    shared: shared,
-    onExit: () => setView(HOME)
-  }), view === "agentLogin" && React.createElement(AgentLogin, {
-    agents: agents,
-    onCancel: () => setView("staffChoice"),
-    onSuccess: ag => {
-      setLoggedAgent(ag);
-      setView("agent");
-    }
-  }), view === "agent" && loggedAgent && React.createElement(AgentApp, {
-    agent: loggedAgent,
-    shared: shared,
-    onExit: () => {
-      setLoggedAgent(null);
-      setView(HOME);
-    }
-  }))));
+    };
+    const App2 = liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
+    return React.createElement(App2, {
+      session: liveSession,
+      setSession: setLiveSession,
+      onExit: exit
+    });
+  })())));
 }
 const rootEl = document.getElementById("root");
 const root = ReactDOM.createRoot(rootEl);

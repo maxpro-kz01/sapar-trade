@@ -36,12 +36,18 @@ async function stApi(path, { method = "GET", body, token, timeoutMs = 75000 } = 
 }
 
 // Загрузка данных экрана: { data, error, loading, reload }. При 401 — выход из сессии.
-function useLive(session, path, onAuthLost) {
+// refreshMs — автообновление (например, список заказов раз в 30 секунд); при обновлении старые данные не прячем
+function useLive(session, path, onAuthLost, refreshMs) {
   const [state, setState] = useState({ data: null, error: null, loading: true });
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!refreshMs) return undefined;
+    const t = setInterval(() => setTick((x) => x + 1), refreshMs);
+    return () => clearInterval(t);
+  }, [refreshMs]);
+  useEffect(() => {
     let alive = true;
-    setState((s) => ({ ...s, loading: true, error: null }));
+    setState((s) => ({ ...s, loading: !s.data, error: null }));
     stApi(path, { token: session.token })
       .then((data) => alive && setState({ data, error: null, loading: false }))
       .catch((e) => {

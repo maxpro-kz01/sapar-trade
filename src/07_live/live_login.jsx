@@ -1,7 +1,14 @@
 // Sapar Trade — система управления. Модуль: вход сотрудника по личному логину и паролю (проверка на сервере)
 // Пароли хранятся на сервере в виде хэша; 5 ошибок подряд — блокировка на 15 минут.
 
-function LiveLogin({ onCancel, onSuccess, notice }) {
+const LOGIN_MODES = {
+  mgmt: { title: "Система управления", icon: "bar-chart", allow: () => true },
+  admin: { title: "Администратор", icon: "shield-check", allow: (perms) => ["shift", "orders.manage", "orders.all"].some((x) => perms.includes(x)) },
+  tp: { title: "Торговый представитель", icon: "users", allow: (perms) => perms.includes("orders.create") },
+};
+
+function LiveLogin({ onCancel, onSuccess, notice, mode = "mgmt" }) {
+  const M = LOGIN_MODES[mode] || LOGIN_MODES.mgmt;
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -13,7 +20,8 @@ function LiveLogin({ onCancel, onSuccess, notice }) {
     const t = setTimeout(() => setSlow(true), 4000);
     try {
       const r = await stApi("/api/auth/login", { method: "POST", body: { login: login.trim(), password } });
-      onSuccess({ token: r.token, user: r.user, perms: r.perms });
+      if (!M.allow(r.perms || [])) { setErr(`Для вашей роли раздел «${M.title}» недоступен. Войдите через «Система управления».`); return; }
+      onSuccess({ token: r.token, user: r.user, perms: r.perms, mode });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -26,8 +34,8 @@ function LiveLogin({ onCancel, onSuccess, notice }) {
       <div className="flex flex-col h-full px-6 pt-4 font-body overflow-y-auto pb-8 kz-narrow">
         <button onClick={onCancel} className="mb-6 p-2 -ml-2 rounded-full w-fit"><Ico name="arrow-left" size={20} color="var(--ink)" /></button>
         <div className="flex flex-col items-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--navy)" }}><Ico name="bar-chart" size={28} color="#fff" /></div>
-          <h1 className="font-display text-center" style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)" }}>Система управления</h1>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--navy)" }}><Ico name={M.icon} size={28} color="#fff" /></div>
+          <h1 className="font-display text-center" style={{ fontSize: 18, fontWeight: 800, color: "var(--ink)" }}>{M.title}</h1>
           <p className="text-center" style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Данные из 1С · личный логин и пароль</p>
         </div>
         <Field label="Логин" value={login} autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="username"

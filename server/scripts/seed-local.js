@@ -32,7 +32,7 @@ await post("cost", { from: day(-40), to: day(0), rows: cost });
 
 const login = async (l, p) => (await (await fetch(B + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ login: l, password: p }) })).json()).token;
 const t = await login("owner", "Owner12345");
-for (const [l, name, role, manager1c] of [["director", "Директор Асхат", "director"], ["tp1", "Ержан Ахметов", "tp", "Ахметов Ержан"], ["sklad", "Дамир (склад)", "warehouse"]]) {
+for (const [l, name, role, manager1c] of [["director", "Директор Асхат", "director"], ["tp1", "Ержан Ахметов", "tp", "Ахметов Ержан"], ["sklad", "Дамир (склад)", "warehouse"], ["adm", "Айгуль (администратор)", "admin"]]) {
   const r = await fetch(B + "/api/users", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + t }, body: JSON.stringify({ login: l, name, role, password: "Passw0rd1", manager1c }) });
   console.log("user", l, r.status);
 }

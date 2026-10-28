@@ -1,4 +1,5 @@
-// Скриншоты сайта на разных размерах экрана (для проверки адаптивности).
+// Скриншоты стартового экрана и клиентского приложения (#client) на разных размерах экрана.
+// Админка, ТП и система управления — tools/apps-shots.mjs и tools/live-shots.mjs (нужен локальный сервер).
 // Запуск: node tools/screenshots.mjs [выходная_папка]
 // React / ReactDOM / Leaflet подставляются из node_modules вместо CDN, тайлы карты и шрифты блокируются.
 
@@ -75,16 +76,6 @@ for (const size of only) {
   await p.fill('input[placeholder="Например, Азамат"]', "Азамат");
   await click(p, "Продолжить");
   await shot(p, size, "02_client_home");
-
-  // Админ
-  p = await newPage(vp);
-  await click(p, "Администратор");
-  const ins = p.locator("input");
-  await ins.nth(0).fill("admin"); await ins.nth(1).fill("admin");
-  await click(p, "Войти");
-  await shot(p, size, "03_admin_shift");
-  await click(p, "Заказы"); await shot(p, size, "04_admin_orders");
-  await click(p, "Склад"); await shot(p, size, "05_admin_stock");
 
 }
 
