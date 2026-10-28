@@ -9,15 +9,18 @@
 
 //  team / team.own — рейтинг ТП всех / своей команды; plans.edit — ввод плана продаж
 //  Задачи доступны всем ролям (видят свои; владелец и директор — все).
+//  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
+//  orders.manage — менять статус (принят/собран/отгружен); shift — смены администратора; settings — настройки
 export const ROLE_PERMS = {
-  owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all"],
-  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all"],
-  supervisor: ["sales.own", "debts.own", "team.own"],
-  tp:         ["sales.own", "debts.own", "team.own"],
-  accountant: ["sales", "debts", "sync"],
+  owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all",
+               "orders.create", "orders.all", "orders.manage", "settings"],
+  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage"],
+  supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
+  tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
+  accountant: ["sales", "debts", "sync", "orders.all"],
   financier:  ["sales", "debts"],
-  warehouse:  ["stock"],
-  admin:      ["stock", "users"],
+  warehouse:  ["stock", "orders.all", "orders.manage"],
+  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings"],
   driver:     [],
 };
 

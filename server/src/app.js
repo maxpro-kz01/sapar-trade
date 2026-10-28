@@ -7,6 +7,7 @@ import userRoutes from "./routes/users.js";
 import syncRoutes from "./routes/sync.js";
 import reportRoutes from "./routes/reports.js";
 import mgmtRoutes from "./routes/mgmt.js";
+import orderRoutes from "./routes/orders.js";
 
 export function createApp() {
   const app = express();
@@ -28,6 +29,7 @@ export function createApp() {
   app.use("/api/sync", syncRoutes);
   app.use("/api", reportRoutes);
   app.use("/api", mgmtRoutes);
+  app.use("/api", orderRoutes);
 
   app.use("/api", (req, res) => res.status(404).json({ error: "Не найдено" }));
 
