@@ -9,7 +9,7 @@ import base64, io, os, sys, textwrap, zipfile
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agent")
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(ROOT), "agent-update.bat")
 FILES = ["sapar-1c-agent.ps1", "install-task.ps1", "README.md", "config.example.json",
-         "1_save-password.bat", "2_check-1c.bat", "3_send-now.bat", "4_load-history.bat", "5_check-orders.bat"]
+         "1_save-password.bat", "2_check-1c.bat", "3_send-now.bat", "4_load-history.bat", "5_check-orders.bat", "6_autostart.bat"]
 
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
