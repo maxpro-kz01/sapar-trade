@@ -3,6 +3,7 @@
 import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import { readFileSync, mkdirSync } from "node:fs";
+import { chromePath } from "./chrome-path.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +13,7 @@ mkdirSync(out, { recursive: true });
 const local = { "react.production.min.js": "node_modules/react/umd/react.production.min.js", "react-dom.production.min.js": "node_modules/react-dom/umd/react-dom.production.min.js" };
 const site = createServer((req, res) => { res.setHeader("content-type", "text/html; charset=utf-8"); res.end(readFileSync(join(root, "public/index.html"))); });
 await new Promise((ok) => site.listen(8080, "127.0.0.1", ok));
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const browser = await chromium.launch({ executablePath: chromePath });
 const errors = [], report = [];
 let fails = 0;
 const check = (ok, msg) => { report.push((ok ? "✓ " : "✗ ") + msg); if (!ok) fails++; };

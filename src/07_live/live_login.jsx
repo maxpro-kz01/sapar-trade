@@ -5,6 +5,7 @@ const LOGIN_MODES = {
   mgmt: { title: "Система управления", icon: "bar-chart", allow: () => true },
   admin: { title: "Администратор", icon: "shield-check", allow: (perms) => ["shift", "orders.manage", "orders.all"].some((x) => perms.includes(x)) },
   tp: { title: "Торговый представитель", icon: "users", allow: (perms) => perms.includes("orders.create") },
+  driver: { title: "Водитель-экспедитор", icon: "map-pin", allow: (perms) => perms.includes("fleet.send") },
 };
 
 function LiveLogin({ onCancel, onSuccess, notice, mode = "mgmt" }) {

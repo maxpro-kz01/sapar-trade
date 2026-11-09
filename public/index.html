@@ -4382,6 +4382,42 @@ function StaffGate({
       transform: "rotate(180deg)"
     }
   })), React.createElement("button", {
+    onClick: () => onPick("driver"),
+    className: "rounded-2xl p-4 mt-3 flex items-center gap-3 press-98",
+    style: {
+      border: "1.5px solid var(--line)",
+      background: "#fff"
+    }
+  }, React.createElement("div", {
+    className: "rounded-xl p-2.5",
+    style: {
+      background: "#E3F5E9"
+    }
+  }, React.createElement(Ico, {
+    name: "map-pin",
+    size: 18,
+    color: "#127A33"
+  })), React.createElement("div", {
+    className: "flex-1 text-left"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      color: "var(--ink)"
+    }
+  }, "\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u044C-\u044D\u043A\u0441\u043F\u0435\u0434\u0438\u0442\u043E\u0440"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, "\u0420\u0435\u0439\u0441 \u0438 \u043F\u0435\u0440\u0435\u0434\u0430\u0447\u0430 GPS")), React.createElement(Ico, {
+    name: "arrow-left",
+    size: 16,
+    color: "var(--muted)",
+    style: {
+      transform: "rotate(180deg)"
+    }
+  })), React.createElement("button", {
     onClick: () => onPick("mgmt"),
     className: "rounded-2xl p-4 mt-3 flex items-center gap-3 press-98",
     style: {
@@ -4813,6 +4849,11 @@ const LOGIN_MODES = {
     title: "Торговый представитель",
     icon: "users",
     allow: perms => perms.includes("orders.create")
+  },
+  driver: {
+    title: "Водитель-экспедитор",
+    icon: "map-pin",
+    allow: perms => perms.includes("fleet.send")
   }
 };
 function LiveLogin({
@@ -5242,7 +5283,7 @@ const MG_TABS = {
 function mgTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
   const role = session.user.role;
-  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", ["owner", "director"].includes(role) && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross") && "finance", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
+  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross") && "finance", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
 }
 const MG_PERIOD_TABS = ["home", "sales", "team", "clients", "finance"];
 const MgCard = ({
@@ -6255,33 +6296,497 @@ function MgProblems({
     onGo: go
   })));
 }
-function MgFleet() {
-  return React.createElement(MgCard, null, React.createElement("div", {
-    className: "flex items-center gap-3 mb-2"
-  }, React.createElement("div", {
-    className: "rounded-xl p-2.5",
-    style: {
-      background: "#F2F1F8"
+const GPS_SEND_MS = 30000;
+const GPS_MIN_GAP_MS = 25000;
+const GPS_MIN_MOVE_M = 30;
+const GPS_BATCH = 300;
+const GPS_QUEUE_MAX = 3000;
+const GPS_QUEUE_KEY = "st.gps.queue";
+const KZO_CENTER = [44.8465, 65.4935];
+function gpsDistM(a, b) {
+  const R = 6371000,
+    rad = Math.PI / 180;
+  const dLa = (b.lat - a.lat) * rad,
+    dLn = (b.lon - a.lon) * rad;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLn / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function gpsShouldKeep(prev, p) {
+  if (!prev) return true;
+  const dt = p.t - prev.t;
+  if (dt >= GPS_MIN_GAP_MS) return true;
+  return dt >= 5000 && gpsDistM(prev, p) >= GPS_MIN_MOVE_M;
+}
+const gpsQueue = {
+  load() {
+    try {
+      const v = JSON.parse(localStorage.getItem(GPS_QUEUE_KEY) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
     }
-  }, React.createElement(Ico, {
-    name: "map-pin",
-    size: 20,
-    color: "var(--muted)"
-  })), React.createElement("div", null, React.createElement("p", {
+  },
+  save(list) {
+    try {
+      localStorage.setItem(GPS_QUEUE_KEY, JSON.stringify(list.slice(-GPS_QUEUE_MAX)));
+    } catch (e) {}
+  }
+};
+const FLEET_STATUS = {
+  ok: ["Сигнал есть", "#127A33", "#E3F5E9"],
+  late: ["Сигнал 2–5 мин назад", "#8A5A00", "#FFF6DE"],
+  lost: ["Нет сигнала", "#B3261E", "#FCE7E6"],
+  off: ["Не в рейсе", "#77748C", "#F2F1F8"]
+};
+const FLEET_PIN = {
+  ok: "#1FA854",
+  late: "#F5A300",
+  lost: "#E2231A",
+  off: "#9A97AE"
+};
+function fleetAge(sec) {
+  if (sec === null || sec === undefined) return "—";
+  if (sec < 60) return sec + " с назад";
+  if (sec < 3600) return Math.floor(sec / 60) + " мин назад";
+  return Math.floor(sec / 3600) + " ч " + Math.floor(sec % 3600 / 60) + " мин назад";
+}
+function fleetDuration(ms) {
+  const m = Math.max(0, Math.floor(ms / 60000));
+  return Math.floor(m / 60) + " ч " + String(m % 60).padStart(2, "0") + " мин";
+}
+const fleetTime = ts => ts ? new Date(ts).toLocaleTimeString("ru-RU", {
+  timeZone: ST_TZ,
+  hour: "2-digit",
+  minute: "2-digit"
+}) : "—";
+const fleetKm = n => n === null || n === undefined ? "—" : Number(n).toLocaleString("ru-RU", {
+  maximumFractionDigits: 1
+}) + " км";
+const fleetInitials = name => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
+function useLeaflet() {
+  const [L, setL] = useState(window.L || null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (window.L) {
+      setL(window.L);
+      return undefined;
+    }
+    if (!document.getElementById("leaflet-css")) {
+      const l = document.createElement("link");
+      l.id = "leaflet-css";
+      l.rel = "stylesheet";
+      l.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(l);
+    }
+    let s = document.getElementById("leaflet-js");
+    if (!s) {
+      s = document.createElement("script");
+      s.id = "leaflet-js";
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      document.head.appendChild(s);
+    }
+    const ok = () => setL(window.L);
+    const bad = () => setFailed(true);
+    s.addEventListener("load", ok);
+    s.addEventListener("error", bad);
+    const to = setTimeout(() => {
+      if (!window.L) setFailed(true);
+    }, 12000);
+    return () => {
+      s.removeEventListener("load", ok);
+      s.removeEventListener("error", bad);
+      clearTimeout(to);
+    };
+  }, []);
+  return {
+    L,
+    failed
+  };
+}
+const FLEET_HTML_ESC = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+const fleetEsc = s => String(s).split("").map(c => FLEET_HTML_ESC[c] || c).join("");
+function fleetPinHtml(d, dim) {
+  const col = FLEET_PIN[d.status] || FLEET_PIN.off;
+  return '<div style="width:36px;height:36px;border-radius:50%;background:' + col + ';color:#fff;font:800 12px Manrope,sans-serif;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);opacity:' + (dim ? 0.45 : 1) + '">' + fleetEsc(fleetInitials(d.name)) + "</div>";
+}
+function FleetMap({
+  L,
+  drivers,
+  track,
+  focus,
+  onPick,
+  height = 360
+}) {
+  const box = useRef(null),
+    map = useRef(null),
+    layer = useRef(null),
+    fitted = useRef("");
+  useEffect(() => {
+    if (!L || !box.current || map.current) return undefined;
+    const m = L.map(box.current, {
+      zoomControl: true,
+      attributionControl: true
+    }).setView(KZO_CENTER, 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap"
+    }).addTo(m);
+    layer.current = L.layerGroup().addTo(m);
+    map.current = m;
+    setTimeout(() => m.invalidateSize(), 250);
+    return () => {
+      m.remove();
+      map.current = null;
+      layer.current = null;
+    };
+  }, [L]);
+  useEffect(() => {
+    if (!L || !layer.current) return;
+    const g = layer.current;
+    g.clearLayers();
+    const bounds = [];
+    if (track && track.length) {
+      const line = track.map(p => [p.lat, p.lon]);
+      L.polyline(line, {
+        color: "#1B1464",
+        weight: 4,
+        opacity: 0.85
+      }).addTo(g);
+      L.circleMarker(line[0], {
+        radius: 6,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#1FA854",
+        fillOpacity: 1
+      }).addTo(g).bindTooltip("Начало · " + fleetTime(track[0].at));
+      L.circleMarker(line[line.length - 1], {
+        radius: 6,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#E2231A",
+        fillOpacity: 1
+      }).addTo(g).bindTooltip("Конец · " + fleetTime(track[track.length - 1].at));
+      line.forEach(x => bounds.push(x));
+    }
+    drivers.filter(d => d.last).forEach(d => {
+      const dim = focus && focus !== d.id;
+      const pos = [d.last.lat, d.last.lon];
+      L.marker(pos, {
+        zIndexOffset: dim ? 0 : 1000,
+        icon: L.divIcon({
+          className: "",
+          html: fleetPinHtml(d, dim),
+          iconSize: [36, 36],
+          iconAnchor: [18, 18]
+        })
+      }).addTo(g).bindTooltip(fleetEsc(d.name) + " · " + FLEET_STATUS[d.status][0] + " · " + fleetAge(d.ageSec)).on("click", () => onPick(d.id));
+      if (!track || !track.length) bounds.push(pos);
+    });
+    const key = (focus || "all") + ":" + (track ? track.length > 0 : "-");
+    if (bounds.length && fitted.current !== key) {
+      fitted.current = key;
+      if (bounds.length === 1) map.current.setView(bounds[0], 15);else map.current.fitBounds(bounds, {
+        padding: [30, 30],
+        maxZoom: 16
+      });
+    }
+  }, [L, drivers, track, focus]);
+  useEffect(() => {
+    if (map.current) setTimeout(() => map.current.invalidateSize(), 50);
+  }, [height]);
+  return React.createElement("div", {
+    ref: box,
+    "data-testid": "fleet-map",
+    style: {
+      height,
+      width: "100%",
+      borderRadius: 16,
+      overflow: "hidden",
+      position: "relative",
+      zIndex: 0,
+      border: "1px solid var(--line)",
+      background: "#F3F6FB"
+    }
+  });
+}
+function MgFleet({
+  session,
+  authLost
+}) {
+  const live = useLive(session, "/api/fleet/live", authLost, 15000);
+  const {
+    L,
+    failed
+  } = useLeaflet();
+  const [focus, setFocus] = useState(null);
+  const [date, setDate] = useState(stToday());
+  const track = useFleetTrack(session, focus, date, authLost);
+  const bp = useBreakpoint();
+  const drivers = live.data ? live.data.drivers : [];
+  const sel = drivers.find(d => d.id === focus) || null;
+  const count = st => drivers.filter(d => d.status === st).length;
+  const pick = id => {
+    setFocus(id === focus ? null : id);
+    setDate(stToday());
+  };
+  if (!live.data) return React.createElement(LiveState, {
+    loading: live.loading,
+    error: live.error,
+    onRetry: live.reload
+  });
+  if (!drivers.length) return React.createElement(MgCard, null, React.createElement("p", {
     style: {
       fontSize: 14,
-      fontWeight: 800
+      fontWeight: 800,
+      marginBottom: 6
     }
-  }, "\u042D\u043A\u0441\u043F\u0435\u0434\u0438\u0442\u043E\u0440\u044B \u043D\u0430 \u043A\u0430\u0440\u0442\u0435"), React.createElement(Badge, {
-    bg: "#F2F1F8",
-    fg: "var(--muted)"
-  }, "\u043D\u0435 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u043E"))), React.createElement("p", {
+  }, "\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u0435\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442"), React.createElement("p", {
     style: {
       fontSize: 12.5,
       color: "var(--muted)",
       lineHeight: 1.5
     }
-  }, "\u0427\u0442\u043E\u0431\u044B \u0432\u0438\u0434\u0435\u0442\u044C \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u0435\u0439-\u044D\u043A\u0441\u043F\u0435\u0434\u0438\u0442\u043E\u0440\u043E\u0432 \u043D\u0430 \u043A\u0430\u0440\u0442\u0435, \u043D\u0443\u0436\u0435\u043D \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A \u043A\u043E\u043E\u0440\u0434\u0438\u043D\u0430\u0442: \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043D\u0430 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435 \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044F (\u043F\u0435\u0440\u0435\u0434\u0430\u0451\u0442 \u043C\u0435\u0441\u0442\u043E \u0432\u043E \u0432\u0440\u0435\u043C\u044F \u0440\u0435\u0439\u0441\u0430) \u0438\u043B\u0438 GPS-\u0442\u0440\u0435\u043A\u0435\u0440 \u0432 \u043C\u0430\u0448\u0438\u043D\u0435. \u0412 1\u0421 \u0442\u0430\u043A\u0438\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u043D\u0435\u0442. \u041A\u043E\u0433\u0434\u0430 \u0432\u044B\u0431\u0435\u0440\u0435\u0442\u0435 \u0432\u0430\u0440\u0438\u0430\u043D\u0442, \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0438\u043C \u043A\u0430\u0440\u0442\u0443, \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B \u0438 \u0441\u0438\u0433\u043D\u0430\u043B \xAB\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0431\u043E\u043B\u044C\u0448\u0435 5 \u043C\u0438\u043D\u0443\u0442\xBB."));
+  }, "\u0421\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u043E\u0432 \u0441 \u0440\u043E\u043B\u044C\u044E \xAB\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u044C-\u044D\u043A\u0441\u043F\u0435\u0434\u0438\u0442\u043E\u0440\xBB (\u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u2192 \u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0438) \u0438 \u0432\u044B\u0434\u0430\u0439\u0442\u0435 \u0438\u043C \u043B\u043E\u0433\u0438\u043D \u0438 \u043F\u0430\u0440\u043E\u043B\u044C. \u0412\u043E\u0434\u0438\u0442\u0435\u043B\u044C \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u0441\u0430\u0439\u0442 \u043D\u0430 \u0442\u0435\u043B\u0435\u0444\u043E\u043D\u0435 \u2192 \xAB\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u044C-\u044D\u043A\u0441\u043F\u0435\u0434\u0438\u0442\u043E\u0440\xBB \u2192 \xAB\u041D\u0430\u0447\u0430\u0442\u044C \u0440\u0435\u0439\u0441\xBB \u2014 \u0438 \u043F\u043E\u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u0437\u0434\u0435\u0441\u044C \u043D\u0430 \u043A\u0430\u0440\u0442\u0435."));
+  return React.createElement("div", null, React.createElement("div", {
+    className: "flex flex-wrap gap-2 mb-3"
+  }, React.createElement(Badge, {
+    bg: "#E3F5E9",
+    fg: "#127A33"
+  }, "\u0412 \u0440\u0435\u0439\u0441\u0435: ", drivers.filter(d => d.inTrip).length), count("lost") > 0 && React.createElement(Badge, {
+    bg: "#FCE7E6",
+    fg: "#B3261E"
+  }, "\u041D\u0435\u0442 \u0441\u0438\u0433\u043D\u0430\u043B\u0430: ", count("lost")), count("late") > 0 && React.createElement(Badge, {
+    bg: "#FFF6DE",
+    fg: "#8A5A00"
+  }, "\u0421\u0438\u0433\u043D\u0430\u043B \u0437\u0430\u043F\u0430\u0437\u0434\u044B\u0432\u0430\u0435\u0442: ", count("late")), React.createElement(Badge, {
+    bg: "#F2F1F8",
+    fg: "var(--muted)"
+  }, "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E ", fleetTime(live.data.at))), failed ? React.createElement(MgCard, null, React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)"
+    }
+  }, "\u041A\u0430\u0440\u0442\u0430 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043B\u0430\u0441\u044C (\u043D\u0435\u0442 \u0441\u0432\u044F\u0437\u0438 \u0441 OpenStreetMap). \u0421\u043F\u0438\u0441\u043E\u043A \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u0435\u0439 \u043D\u0438\u0436\u0435 \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442.")) : L ? React.createElement(FleetMap, {
+    L: L,
+    drivers: drivers,
+    track: sel && track.data ? track.data.points : null,
+    focus: focus,
+    onPick: pick,
+    height: bp === "desktop" ? 460 : 330
+  }) : React.createElement("div", {
+    className: "rounded-2xl flex items-center justify-center",
+    style: {
+      height: 200,
+      background: "#F3F6FB",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)"
+    }
+  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043A\u0430\u0440\u0442\u044B\u2026")), sel && React.createElement(FleetDriverDetail, {
+    d: sel,
+    date: date,
+    setDate: setDate,
+    track: track,
+    onClose: () => setFocus(null)
+  }), React.createElement(MgLabel, null, "\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u0438"), drivers.map(d => React.createElement(FleetDriverRow, {
+    key: d.id,
+    d: d,
+    on: d.id === focus,
+    onClick: () => pick(d.id)
+  })), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 8,
+      lineHeight: 1.5
+    }
+  }, "\u041C\u0435\u0441\u0442\u043E \u043F\u0435\u0440\u0435\u0434\u0430\u0451\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0432\u043E \u0432\u0440\u0435\u043C\u044F \u0440\u0435\u0439\u0441\u0430 \u0438 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u043A\u0430 \u0443 \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044F \u043E\u0442\u043A\u0440\u044B\u0442\u0430 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430 \u0440\u0435\u0439\u0441\u0430. \xAB\u041D\u0435\u0442 \u0441\u0438\u0433\u043D\u0430\u043B\u0430\xBB \u2014 \u0432 \u0440\u0435\u0439\u0441\u0435, \u043D\u043E \u0442\u043E\u0447\u0435\u043A \u043D\u0435\u0442 \u0431\u043E\u043B\u044C\u0448\u0435 5 \u043C\u0438\u043D\u0443\u0442 (\u0441\u0432\u0435\u0440\u043D\u0443\u043B \u0431\u0440\u0430\u0443\u0437\u0435\u0440, \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043B \u044D\u043A\u0440\u0430\u043D \u0438\u043B\u0438 \u043D\u0435\u0442 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442\u0430)."));
+}
+function useFleetTrack(session, driver, date, authLost) {
+  const [st, setSt] = useState({
+    data: null,
+    error: null,
+    loading: false
+  });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!driver || date !== stToday()) return undefined;
+    const t = setInterval(() => setTick(x => x + 1), 30000);
+    return () => clearInterval(t);
+  }, [driver, date]);
+  useEffect(() => {
+    if (!driver) {
+      setSt({
+        data: null,
+        error: null,
+        loading: false
+      });
+      return undefined;
+    }
+    let alive = true;
+    setSt(s => ({
+      data: s.data && s.data.driver.id === driver && s.data.date === date ? s.data : null,
+      error: null,
+      loading: true
+    }));
+    stApi("/api/fleet/track?" + stQs({
+      driver,
+      date
+    }), {
+      token: session.token
+    }).then(data => alive && setSt({
+      data,
+      error: null,
+      loading: false
+    })).catch(e => {
+      if (!alive) return;
+      if (e.status === 401) authLost(e.message);
+      setSt({
+        data: null,
+        error: e.message,
+        loading: false
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [driver, date, tick]);
+  return st;
+}
+function FleetDriverRow({
+  d,
+  on,
+  onClick
+}) {
+  const [label, fg, bg] = FLEET_STATUS[d.status];
+  return React.createElement(MgCard, {
+    onClick: onClick,
+    style: {
+      border: on ? "1.5px solid var(--navy)" : undefined
+    }
+  }, React.createElement("div", {
+    className: "flex items-center gap-3",
+    "data-testid": "fleet-driver"
+  }, React.createElement("div", {
+    className: "rounded-full flex items-center justify-center shrink-0",
+    style: {
+      width: 38,
+      height: 38,
+      background: FLEET_PIN[d.status],
+      color: "#fff",
+      fontWeight: 800,
+      fontSize: 13
+    }
+  }, fleetInitials(d.name)), React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 13.5,
+      fontWeight: 700
+    }
+  }, d.name), React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, d.inTrip ? "В рейсе с " + fleetTime(d.tripStartedAt) + " · " + fleetKm(d.tripKm) : "Сегодня " + fleetKm(d.kmToday), d.last && d.last.speedKmh !== null && d.inTrip ? " · " + d.last.speedKmh + " км/ч" : "")), React.createElement("div", {
+    className: "text-right shrink-0"
+  }, React.createElement(Badge, {
+    bg: bg,
+    fg: fg
+  }, label), React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)",
+      marginTop: 3
+    }
+  }, d.last ? fleetAge(d.ageSec) : "точек нет"))));
+}
+function FleetDriverDetail({
+  d,
+  date,
+  setDate,
+  track,
+  onClose
+}) {
+  const t = track.data;
+  return React.createElement(MgCard, {
+    style: {
+      marginTop: 12
+    }
+  }, React.createElement("div", {
+    className: "flex items-center justify-between mb-2",
+    style: {
+      gap: 8
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 14,
+      fontWeight: 800
+    }
+  }, "\u041C\u0430\u0440\u0448\u0440\u0443\u0442: ", d.name), React.createElement("button", {
+    onClick: onClose,
+    className: "p-1.5 rounded-full",
+    title: "\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0432\u0441\u0435\u0445",
+    style: {
+      background: "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "x",
+    size: 14
+  }))), React.createElement("label", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    }
+  }, "\u0414\u0430\u0442\u0430", " ", React.createElement("input", {
+    type: "date",
+    value: date,
+    max: stToday(),
+    onChange: e => e.target.value && setDate(e.target.value),
+    className: "rounded-lg px-2 py-1 ml-1",
+    style: {
+      border: "1px solid var(--line)",
+      fontSize: 12.5
+    }
+  })), track.loading && !t && React.createElement(LiveState, {
+    loading: true
+  }), track.error && React.createElement(LiveState, {
+    error: track.error
+  }), t && React.createElement("div", {
+    className: "mt-2"
+  }, React.createElement(MgRow, {
+    l: "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u043E \u0437\u0430 \u0434\u0435\u043D\u044C",
+    v: fleetKm(t.km),
+    strong: true
+  }), React.createElement(MgRow, {
+    l: "\u0420\u0435\u0439\u0441\u043E\u0432",
+    v: String(t.trips.length)
+  }), t.trips.map((x, i) => React.createElement(MgRow, {
+    key: x.id,
+    l: "Рейс " + (i + 1),
+    v: fleetTime(x.startedAt) + " – " + (x.endedAt ? fleetTime(x.endedAt) : "идёт") + " · " + fleetKm(x.km)
+  })), React.createElement(MgRow, {
+    l: "\u0422\u043E\u0447\u0435\u043A \u043D\u0430 \u043A\u0430\u0440\u0442\u0435",
+    v: String(t.points.length)
+  }), !t.points.length && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginTop: 6
+    }
+  }, "\u0417\u0430 \u044D\u0442\u043E\u0442 \u0434\u0435\u043D\u044C \u0442\u043E\u0447\u0435\u043A \u043D\u0435\u0442.")));
 }
 const MG_TASK_STATUSES = ["Новая", "В работе", "Выполнена", "Отменена"];
 const MG_PRIO_COLOR = {
@@ -7870,6 +8375,490 @@ function TpApp({
     toast: toast
   }));
 }
+function useGpsTracker(session, active, {
+  onAuthLost,
+  onTripGone
+} = {}) {
+  const [s, setS] = useState({
+    perm: "wait",
+    fix: null,
+    queued: gpsQueue.load().length,
+    lastSentAt: null,
+    sendError: "",
+    km: null,
+    wake: null,
+    online: navigator.onLine
+  });
+  const queue = useRef(gpsQueue.load());
+  const lastKept = useRef(queue.current[queue.current.length - 1] || null);
+  const sending = useRef(false);
+  const token = useRef(session.token);
+  token.current = session.token;
+  const cb = useRef({
+    onAuthLost,
+    onTripGone
+  });
+  cb.current = {
+    onAuthLost,
+    onTripGone
+  };
+  const patch = o => setS(x => ({
+    ...x,
+    ...o
+  }));
+  const flush = async () => {
+    if (sending.current || !queue.current.length) return;
+    sending.current = true;
+    const batch = queue.current.slice(0, GPS_BATCH);
+    try {
+      const r = await stApi("/api/fleet/points", {
+        method: "POST",
+        token: token.current,
+        body: {
+          points: batch
+        },
+        timeoutMs: 30000
+      });
+      queue.current = queue.current.slice(batch.length);
+      gpsQueue.save(queue.current);
+      patch({
+        queued: queue.current.length,
+        lastSentAt: Date.now(),
+        sendError: "",
+        km: r.km
+      });
+      if (queue.current.length) setTimeout(flush, 1000);
+    } catch (e) {
+      if (e.status === 401) cb.current.onAuthLost && cb.current.onAuthLost(e.message);else if (e.status === 409) {
+        queue.current = [];
+        gpsQueue.save([]);
+        patch({
+          queued: 0
+        });
+        cb.current.onTripGone && cb.current.onTripGone();
+      } else if (e.status === 400) {
+        queue.current = queue.current.slice(batch.length);
+        gpsQueue.save(queue.current);
+        patch({
+          queued: queue.current.length,
+          sendError: e.message
+        });
+      } else patch({
+        sendError: e.message
+      });
+    } finally {
+      sending.current = false;
+    }
+  };
+  useEffect(() => {
+    if (!active) return undefined;
+    if (!("geolocation" in navigator)) {
+      patch({
+        perm: "unsupported"
+      });
+      return undefined;
+    }
+    let first = true;
+    const id = navigator.geolocation.watchPosition(pos => {
+      const c = pos.coords;
+      const p = {
+        t: pos.timestamp || Date.now(),
+        lat: c.latitude,
+        lon: c.longitude,
+        acc: c.accuracy == null ? null : Math.round(c.accuracy),
+        spd: c.speed == null || Number.isNaN(c.speed) ? null : Math.round(c.speed * 10) / 10,
+        hdg: c.heading == null || Number.isNaN(c.heading) ? null : Math.round(c.heading)
+      };
+      patch({
+        perm: "ok",
+        fix: p
+      });
+      if (p.acc !== null && p.acc > 1000) return;
+      if (!gpsShouldKeep(lastKept.current, p)) return;
+      lastKept.current = p;
+      queue.current = [...queue.current, p].slice(-GPS_QUEUE_MAX);
+      gpsQueue.save(queue.current);
+      patch({
+        queued: queue.current.length
+      });
+      if (first) {
+        first = false;
+        flush();
+      }
+    }, err => {
+      patch({
+        perm: err.code === 1 ? "denied" : "error"
+      });
+    }, {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 60000
+    });
+    return () => navigator.geolocation.clearWatch(id);
+  }, [active]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const t = setInterval(flush, GPS_SEND_MS);
+    const on = () => {
+      patch({
+        online: true
+      });
+      flush();
+    };
+    const off = () => patch({
+      online: false
+    });
+    const vis = () => {
+      if (document.visibilityState === "visible") flush();
+    };
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    document.addEventListener("visibilitychange", vis);
+    flush();
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+      document.removeEventListener("visibilitychange", vis);
+    };
+  }, [active]);
+  useEffect(() => {
+    if (!active) return undefined;
+    if (!("wakeLock" in navigator)) {
+      patch({
+        wake: false
+      });
+      return undefined;
+    }
+    let lock = null,
+      alive = true;
+    const take = async () => {
+      try {
+        lock = await navigator.wakeLock.request("screen");
+        if (alive) patch({
+          wake: true
+        });
+        lock.addEventListener("release", () => alive && patch({
+          wake: false
+        }));
+      } catch (e) {
+        if (alive) patch({
+          wake: false
+        });
+      }
+    };
+    const vis = () => {
+      if (document.visibilityState === "visible") take();
+    };
+    take();
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      alive = false;
+      document.removeEventListener("visibilitychange", vis);
+      if (lock) lock.release().catch(() => {});
+    };
+  }, [active]);
+  const flushAll = async () => {
+    for (let i = 0; i < 20 && queue.current.length; i++) {
+      for (let w = 0; w < 60 && sending.current; w++) await new Promise(ok => setTimeout(ok, 500));
+      const before = queue.current.length;
+      await flush();
+      if (queue.current.length >= before) break;
+    }
+    return queue.current.length;
+  };
+  return {
+    ...s,
+    flush,
+    flushAll
+  };
+}
+function DriverApp({
+  session,
+  setSession,
+  onExit
+}) {
+  const [toast, setToast] = useState(null);
+  const [pwd, setPwd] = useState(false);
+  const [trip, setTrip] = useState(undefined);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [now, setNow] = useState(Date.now());
+  const showToast = m => {
+    setToast(m);
+    setTimeout(() => setToast(null), 2600);
+  };
+  const authLost = msg => onExit(msg || "Сессия завершена, войдите снова");
+  const gps = useGpsTracker(session, !!trip, {
+    onAuthLost: authLost,
+    onTripGone: () => {
+      setTrip(null);
+      showToast("Рейс завершён");
+    }
+  });
+  const load = () => {
+    setErr("");
+    stApi("/api/fleet/trip", {
+      token: session.token
+    }).then(r => setTrip(r.trip)).catch(e => {
+      if (e.status === 401) authLost(e.message);else {
+        setErr(e.message);
+        setTrip(null);
+      }
+    });
+  };
+  useEffect(load, []);
+  useEffect(() => {
+    if (!trip) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, [trip]);
+  const start = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await stApi("/api/fleet/trip/start", {
+        method: "POST",
+        token: session.token
+      });
+      setTrip(r.trip);
+      setNow(Date.now());
+      showToast(r.resumed ? "Рейс продолжается" : "Рейс начат");
+    } catch (e) {
+      if (e.status === 401) authLost(e.message);else setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const end = async () => {
+    if (!window.confirm("Завершить рейс? Передача места прекратится.")) return false;
+    setBusy(true);
+    setErr("");
+    try {
+      const left = await gps.flushAll();
+      const r = await stApi("/api/fleet/trip/end", {
+        method: "POST",
+        token: session.token
+      });
+      setTrip(null);
+      showToast("Рейс завершён · " + fleetKm(r.trip.km) + (left ? " · не отправлено точек: " + left : ""));
+      return true;
+    } catch (e) {
+      if (e.status === 401) authLost(e.message);else if (e.status === 400) {
+        setTrip(null);
+        return true;
+      } else setErr(e.message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const exit = async () => {
+    if (trip && !(await end())) return;
+    onExit();
+  };
+  const onTrip = !!trip;
+  const km = gps.km !== null ? gps.km : trip ? trip.km : 0;
+  return React.createElement("div", {
+    className: "relative h-full flex flex-col kz-app",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "px-5 pb-2 flex items-center gap-2 kz-head"
+  }, React.createElement("div", {
+    className: "rounded-xl flex items-center justify-center shrink-0",
+    style: {
+      width: 32,
+      height: 32,
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement(Logo, {
+    size: 24
+  })), React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    className: "font-display truncate",
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, "\u0420\u0435\u0439\u0441"), React.createElement("p", {
+    className: "truncate",
+    style: {
+      fontSize: 10,
+      color: "var(--muted)"
+    }
+  }, session.user.name, " \xB7 ", LIVE_ROLES[session.user.role] || session.user.role)), React.createElement("button", {
+    onClick: () => setPwd(true),
+    title: "\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u043F\u0430\u0440\u043E\u043B\u044C",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "settings",
+    size: 15
+  })), React.createElement("button", {
+    onClick: exit,
+    title: "\u0412\u044B\u0439\u0442\u0438",
+    className: "p-2 rounded-full",
+    style: {
+      background: "#FCE7E6"
+    }
+  }, React.createElement(Ico, {
+    name: "log-out",
+    size: 15,
+    color: "var(--red)"
+  }))), React.createElement("div", {
+    className: "flex-1 overflow-y-auto pb-10 px-5 pt-2 font-body kz-main kz-narrow"
+  }, trip === undefined && React.createElement(LiveState, {
+    loading: true
+  }), trip !== undefined && React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "rounded-2xl p-5 mb-3 text-center",
+    "data-testid": "trip-card",
+    style: {
+      background: onTrip ? "#E3F5E9" : "#fff",
+      border: "1px solid " + (onTrip ? "#BFE6CB" : "var(--line)")
+    }
+  }, React.createElement("div", {
+    className: "mx-auto mb-3 rounded-full flex items-center justify-center",
+    style: {
+      width: 72,
+      height: 72,
+      background: onTrip ? "#1FA854" : "#F2F1F8"
+    }
+  }, React.createElement(Ico, {
+    name: "map-pin",
+    size: 32,
+    color: onTrip ? "#fff" : "var(--muted)"
+  })), React.createElement("p", {
+    className: "font-display",
+    style: {
+      fontSize: 18,
+      fontWeight: 800
+    }
+  }, onTrip ? "Рейс идёт" : "Рейс не начат"), React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)",
+      marginTop: 4
+    }
+  }, onTrip ? "Место передаётся каждые 30 секунд" : "Место передаётся только во время рейса"), onTrip && React.createElement("div", {
+    className: "grid grid-cols-2 gap-2 mt-4"
+  }, React.createElement(DriverStat, {
+    label: "\u0412 \u0440\u0435\u0439\u0441\u0435",
+    value: fleetDuration(now - new Date(trip.startedAt).getTime())
+  }), React.createElement(DriverStat, {
+    label: "\u041F\u0440\u043E\u0439\u0434\u0435\u043D\u043E",
+    value: fleetKm(km)
+  }))), onTrip && React.createElement(DriverGpsPanel, {
+    gps: gps
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--red)",
+      fontWeight: 600,
+      margin: "8px 0"
+    }
+  }, err), onTrip ? React.createElement("button", {
+    onClick: end,
+    disabled: busy,
+    className: "w-full rounded-2xl py-4 font-bold press-98",
+    style: {
+      background: busy ? "#C9C7D6" : "var(--red)",
+      color: "#fff",
+      fontSize: 15
+    }
+  }, busy ? "Подождите…" : "Завершить рейс") : React.createElement("button", {
+    onClick: start,
+    disabled: busy,
+    className: "w-full rounded-2xl py-4 font-bold press-98",
+    style: {
+      background: busy ? "#C9C7D6" : "#1FA854",
+      color: "#fff",
+      fontSize: 15
+    }
+  }, busy ? "Подождите…" : "Начать рейс"), React.createElement("div", {
+    className: "rounded-2xl p-3.5 mt-4",
+    style: {
+      background: "#FFF6DE"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#8A5A00",
+      lineHeight: 1.5
+    }
+  }, React.createElement("b", null, "\u0412\u0430\u0436\u043D\u043E:"), " \u0432\u043E \u0432\u0440\u0435\u043C\u044F \u0440\u0435\u0439\u0441\u0430 \u043D\u0435 \u0437\u0430\u043A\u0440\u044B\u0432\u0430\u0439\u0442\u0435 \u044D\u0442\u0443 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0443 \u0438 \u043D\u0435 \u0431\u043B\u043E\u043A\u0438\u0440\u0443\u0439\u0442\u0435 \u044D\u043A\u0440\u0430\u043D \u2014 \u0438\u043D\u0430\u0447\u0435 \u0442\u0435\u043B\u0435\u0444\u043E\u043D \u043F\u0435\u0440\u0435\u0441\u0442\u0430\u0451\u0442 \u043F\u0435\u0440\u0435\u0434\u0430\u0432\u0430\u0442\u044C \u043C\u0435\u0441\u0442\u043E. \u0414\u0435\u0440\u0436\u0438\u0442\u0435 \u0442\u0435\u043B\u0435\u0444\u043E\u043D \u043D\u0430 \u0437\u0430\u0440\u044F\u0434\u043A\u0435. \u0411\u0435\u0437 \u0438\u043D\u0442\u0435\u0440\u043D\u0435\u0442\u0430 \u0442\u043E\u0447\u043A\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0438 \u043E\u0442\u043F\u0440\u0430\u0432\u044F\u0442\u0441\u044F, \u043A\u043E\u0433\u0434\u0430 \u0441\u0432\u044F\u0437\u044C \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F.")))), pwd && React.createElement(LivePasswordModal, {
+    session: session,
+    onClose: () => setPwd(false),
+    onChanged: token => {
+      setSession({
+        ...session,
+        token
+      });
+      setPwd(false);
+      showToast("Пароль изменён");
+    }
+  }), React.createElement(Toast, {
+    toast: toast
+  }));
+}
+const DriverStat = ({
+  label,
+  value
+}) => React.createElement("div", {
+  className: "rounded-xl py-2.5",
+  style: {
+    background: "#fff"
+  }
+}, React.createElement("p", {
+  style: {
+    fontSize: 11,
+    color: "var(--muted)"
+  }
+}, label), React.createElement("p", {
+  className: "font-mono-kz",
+  style: {
+    fontSize: 15,
+    fontWeight: 800
+  }
+}, value));
+function DriverGpsPanel({
+  gps
+}) {
+  const warn = [];
+  if (gps.perm === "denied") warn.push("Доступ к местоположению запрещён. Разрешите его для этого сайта в настройках браузера и обновите страницу.");
+  if (gps.perm === "unsupported") warn.push("Этот браузер не умеет определять место. Откройте сайт в Chrome или Safari.");
+  if (gps.perm === "error") warn.push("Телефон не может определить место. Включите геолокацию (GPS) в настройках телефона.");
+  if (!gps.online) warn.push("Нет интернета — точки сохраняются на телефоне и уйдут позже.");
+  if (gps.wake === false) warn.push("Не удалось запретить экрану гаснуть — не блокируйте телефон во время рейса.");
+  if (gps.sendError && gps.online) warn.push("Не отправилось: " + gps.sendError);
+  const acc = gps.fix && gps.fix.acc;
+  return React.createElement(MgCard, null, React.createElement(MgRow, {
+    l: "\u0422\u043E\u0447\u043D\u043E\u0441\u0442\u044C GPS",
+    v: gps.perm === "wait" ? "ищем спутники…" : acc == null ? "—" : "± " + acc + " м",
+    color: acc != null && acc > 100 ? "#8A5A00" : undefined
+  }), React.createElement(MgRow, {
+    l: "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E",
+    v: gps.lastSentAt ? fleetTime(gps.lastSentAt) : "ещё нет"
+  }), React.createElement(MgRow, {
+    l: "\u0416\u0434\u0443\u0442 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0438",
+    v: String(gps.queued),
+    color: gps.queued > 10 ? "#8A5A00" : undefined
+  }), warn.map(w => React.createElement("p", {
+    key: w,
+    style: {
+      fontSize: 12,
+      color: "#B3261E",
+      fontWeight: 600,
+      marginTop: 8,
+      lineHeight: 1.45
+    }
+  }, w)));
+}
 function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = v => {
@@ -7998,7 +8987,7 @@ function App() {
       setLiveNotice(msg || "");
       setView(msg ? "liveLogin" : HOME);
     };
-    const App2 = liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
+    const App2 = liveSession.mode === "driver" || liveSession.user.role === "driver" ? DriverApp : liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
     return React.createElement(App2, {
       session: liveSession,
       setSession: setLiveSession,

@@ -5,6 +5,7 @@
 
 import { chromium } from "playwright-core";
 import { readFileSync, mkdirSync } from "node:fs";
+import { chromePath } from "./chrome-path.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -22,7 +23,7 @@ const local = {
 const SIZES = { phone: [375, 812], tablet: [768, 1024], laptop: [1366, 768], desktop: [1920, 1080] };
 const only = process.env.SIZES ? process.env.SIZES.split(",") : Object.keys(SIZES);
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const browser = await chromium.launch({ executablePath: chromePath });
 const errors = [];
 const report = [];
 

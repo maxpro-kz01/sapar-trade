@@ -11,17 +11,18 @@
 //  Задачи доступны всем ролям (видят свои; владелец и директор — все).
 //  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
 //  orders.manage — менять статус (принят/собран/отгружен); shift — смены администратора; settings — настройки
+//  fleet.send — водитель передаёт своё место в рейсе; fleet.view — карта экспедиторов и маршруты
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all",
-               "orders.create", "orders.all", "orders.manage", "settings"],
-  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view"],
+  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage", "fleet.view"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all"],
   financier:  ["sales", "debts"],
   warehouse:  ["stock", "orders.all", "orders.manage"],
   admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings"],
-  driver:     [],
+  driver:     ["fleet.send"],
 };
 
 export const ROLES = Object.keys(ROLE_PERMS);

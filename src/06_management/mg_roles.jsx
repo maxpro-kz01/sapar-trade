@@ -14,7 +14,7 @@ function mgTabsFor(session) {
     "home",
     can("sales", "sales.own") && "sales",
     can("team", "team.own") && "team",
-    ["owner", "director"].includes(role) && "fleet",
+    can("fleet.view") && "fleet",
     can("debts", "debts.own", "sales", "sales.own") && "clients",
     can("stock") && "stock",
     can("gross") && "finance",

@@ -35,6 +35,14 @@ function StaffGate({ onCancel, onPick }) {
           </div>
           <Ico name="arrow-left" size={16} color="var(--muted)" style={{ transform: "rotate(180deg)" }} />
         </button>
+        <button onClick={() => onPick("driver")} className="rounded-2xl p-4 mt-3 flex items-center gap-3 press-98" style={{ border: "1.5px solid var(--line)", background: "#fff" }}>
+          <div className="rounded-xl p-2.5" style={{ background: "#E3F5E9" }}><Ico name="map-pin" size={18} color="#127A33" /></div>
+          <div className="flex-1 text-left">
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Водитель-экспедитор</p>
+            <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Рейс и передача GPS</p>
+          </div>
+          <Ico name="arrow-left" size={16} color="var(--muted)" style={{ transform: "rotate(180deg)" }} />
+        </button>
         <button onClick={() => onPick("mgmt")} className="rounded-2xl p-4 mt-3 flex items-center gap-3 press-98" style={{ border: "1.5px solid var(--navy)", background: "#EEF0FF" }}>
           <div className="rounded-xl p-2.5" style={{ background: "var(--navy)" }}><Ico name="bar-chart" size={18} color="#fff" /></div>
           <div className="flex-1 text-left">

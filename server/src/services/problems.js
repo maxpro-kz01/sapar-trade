@@ -6,6 +6,7 @@ import { can, scopeOf } from "./rbac.js";
 import { syncStatus } from "./sync.js";
 import { round2, clientFilter, priceType, today, shiftDay, overdueDate } from "./scope.js";
 import { team } from "./team.js";
+import { lostDrivers } from "./fleet.js";
 
 const money = (n) => Math.round(n).toLocaleString("ru-RU").replace(/ /g, " ") + " ₸";
 
@@ -64,6 +65,11 @@ export async function problems(user) {
     const pace = (day / daysInMonth) * 100;
     const behind = tm.items.filter((x) => x.planPct !== null && x.plan > 0 && x.planPct < pace - 15);
     if (behind.length) list.push({ lvl: "yellow", code: "plan", title: `Отстают от плана: ${behind.length}`, detail: behind.slice(0, 5).map((x) => `${x.manager} ${x.planPct}%`).join(", "), tab: "team" });
+  }
+
+  if (can(user, "fleet.view")) {
+    const lost = await lostDrivers();
+    if (lost.length) list.push({ lvl: "red", code: "gps", title: `Нет GPS-сигнала от водителей: ${lost.length}`, detail: lost.map((x) => x.name).join(", ") + " — в рейсе, сигнала нет больше 5 минут", tab: "fleet" });
   }
 
   if (!list.length) list.push({ lvl: "green", code: "ok", title: "Проблем не найдено", detail: "Все показатели в норме", tab: "home" });

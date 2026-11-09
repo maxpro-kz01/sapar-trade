@@ -27,6 +27,8 @@
  "06_management/mg_stock.jsx",
  "06_management/mg_finance.jsx",
  "06_management/mg_problems.jsx",
+ "10_fleet/fleet_core.js",
+ "10_fleet/fleet_map.jsx",
  "06_management/mg_fleet.jsx",
  "06_management/mg_tasks.jsx",
  "06_management/mg_ai.jsx",
@@ -39,5 +41,7 @@
  "09_tp/tp_stores.jsx",
  "09_tp/tp_order.jsx",
  "09_tp/tp_app.jsx",
+ "10_fleet/gps_tracker.js",
+ "10_fleet/driver_app.jsx",
  "00_core/root_app.jsx"
 ]

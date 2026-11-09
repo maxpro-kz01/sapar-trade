@@ -34,3 +34,15 @@
 | 27 | `00_core/root_app.jsx` | Корень всего приложения: состояние, маршрутизация между режимами | 88 |
 
 При переносе в нормальный проект (Vite + React + TypeScript) каждый модуль становится отдельным файлом с `import/export` — см. `../../04_architecture/ARCHITECTURE.md`.
+
+## GPS экспедиторов (`10_fleet/`, ТЗ — `docs/TZ_GPS.md`)
+
+| Файл | Что внутри |
+|---|---|
+| `10_fleet/fleet_core.js` | Константы (30 с, 30 м, 300 точек), расстояние, очередь точек в localStorage, подписи статусов |
+| `10_fleet/fleet_map.jsx` | Карта OpenStreetMap (Leaflet с cdnjs): машины по статусу сигнала, маршрут за день |
+| `10_fleet/gps_tracker.js` | `useGpsTracker`: watchPosition → отбор точек → очередь → отправка пачкой; Wake Lock |
+| `10_fleet/driver_app.jsx` | Экран водителя: «Начать рейс» / «Завершить рейс», точность, очередь, предупреждения |
+| `06_management/mg_fleet.jsx` | Вкладка «Экспедиторы» (владелец, директор): карта, список, маршрут по дате |
+
+Проверка в браузере: `node tools/fleet-shots.mjs` (нужен локальный сервер и `seed-local.js`).

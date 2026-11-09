@@ -63,7 +63,9 @@ function App() {
         {view === "liveLogin" && <LiveLogin mode={loginMode} notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
         {view === "live" && liveSession && (() => {
           const exit = (msg) => { setLoginMode(liveSession.mode || "mgmt"); setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : HOME); };
-          const App2 = liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
+          // водитель всегда попадает на экран рейса, через какой бы вход ни зашёл
+          const App2 = liveSession.mode === "driver" || liveSession.user.role === "driver" ? DriverApp
+            : liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
           return <App2 session={liveSession} setSession={setLiveSession} onExit={exit} />;
         })()}
       </div>
