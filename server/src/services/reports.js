@@ -5,8 +5,9 @@ import { q } from "../db/pool.js";
 import { config } from "../config.js";
 import { can, scopeOf, managersOf } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
+import { expenses, pnlMonths } from "./money.js";
 import {
-  round2, pct, lim, stripForRole, clientFilter, priceType, freshness, overdueDate, prevRange, UNIT_COST_CTE, prorate,
+  round2, pct, lim, stripForRole, clientFilter, priceType, freshness, overdueDate, overdueSql, prevRange, UNIT_COST_CTE, prorate,
 } from "./scope.js";
 
 export { stripForRole };
@@ -103,7 +104,7 @@ export async function dashboard(user, range) {
     const f = clientFilter(user, "debts", "d", p);
     const { rows: [d] } = await q(
       `SELECT coalesce(sum(amount) FILTER (WHERE amount > 0),0) AS total,
-              coalesce(sum(amount) FILTER (WHERE amount > 0 AND doc_date < $1),0) AS overdue,
+              coalesce(sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}),0) AS overdue,
               count(DISTINCT client_code) FILTER (WHERE amount > 0) AS clients
        FROM onec_debts d WHERE true${f}`, p);
     out.debts = { total: round2(d.total), overdue: round2(d.overdue), clients: Number(d.clients), overdueDays: config.overdueDays };
@@ -170,11 +171,14 @@ export async function finance(user, range) {
        GROUP BY 1 ORDER BY revenue DESC`, [from, to]),
   ]);
   const row = (r) => ({ revenue: round2(r.revenue), cost: round2(r.cost), gross: round2(r.revenue - r.cost), marginPct: pct(r.revenue - r.cost, r.revenue) });
+  // чистая прибыль = валовая − операционные расходы (выплаты по статьям ДДС, ТЗ финансов v1.2 §B3)
+  const [exp, expPrev, months] = await Promise.all([expenses(range), expenses(prev), pnlMonths(6)]);
+  const net = (t, e) => ({ expenses: e.total, net: round2(t.gross - e.total), netPct: pct(t.gross - e.total, t.revenue) });
   return stripForRole(user, {
-    period: { from, to }, totals: cur, prev: { period: prev, ...before },
+    period: { from, to }, totals: { ...cur, ...net(cur, exp) }, prev: { period: prev, ...before, ...net(before, expPrev) },
     daily: daily.rows.map((r) => ({ day: r.day, ...row(r) })),
     groups: groups.rows.map((r) => ({ name: r.name, ...row(r) })),
-    notYet: "Касса, банк, расходы и чистая прибыль — следующий этап (нужны новые выгрузки из 1С)",
+    expenses: exp.items, months,
     ...(await freshness()),
   });
 }

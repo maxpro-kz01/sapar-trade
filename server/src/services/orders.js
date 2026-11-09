@@ -4,6 +4,7 @@ import { q, tx } from "../db/pool.js";
 import { can, managersOf } from "./rbac.js";
 import { HttpError, isIsoDate } from "../lib/http.js";
 import { priceType, round2 } from "./scope.js";
+import { getSettings } from "./settings.js";
 
 export const ORDER_STATUSES = ["Новый", "Принят", "Собран", "Отгружен", "Отменён"];
 const NEXT = { "Новый": ["Принят", "Отменён"], "Принят": ["Собран", "Отменён"], "Собран": ["Отгружен", "Отменён"], "Отгружен": [], "Отменён": [] };
@@ -44,11 +45,13 @@ export async function createOrder(user, b) {
     return { line: i + 1, code, name: p.name, unit: p.unit, qty, price: p.price, sum: round2(qty * p.price) };
   });
   const total = round2(lines.reduce((a, l) => a + l.sum, 0));
+  // пока отправка в 1С выключена в настройках — заказ в 1С не уходит (и не уйдёт пачкой при включении)
+  const onec = (await getSettings()).onecOrders ? "pending" : "skip";
   return tx(async (c) => {
     const { rows: [o] } = await c.query(
-      `INSERT INTO orders(client_code, client_name, manager, created_by, comment, delivery_date, price_type, total)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, created_at`,
-      [client.code, client.name, client.manager, user.id, b.comment ? String(b.comment).slice(0, 1000) : null, b.deliveryDate || null, pt, total]);
+      `INSERT INTO orders(client_code, client_name, manager, created_by, comment, delivery_date, price_type, total, onec_status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, created_at`,
+      [client.code, client.name, client.manager, user.id, b.comment ? String(b.comment).slice(0, 1000) : null, b.deliveryDate || null, pt, total, onec]);
     for (const l of lines)
       await c.query("INSERT INTO order_items(order_id, line, product_code, name, unit, qty, price, sum) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         [o.id, l.line, l.code, l.name, l.unit, l.qty, l.price, l.sum]);
@@ -103,13 +106,15 @@ export async function setStatus(user, id, status, note) {
 export async function retry1c(user, id) {
   if (!can(user, "orders.manage")) throw new HttpError(403, "Нет доступа");
   const o = await getVisible(user, id);
-  if (o.onec_status !== "error") throw new HttpError(400, "Повторять нужно только заказы с ошибкой отправки");
+  if (!["error", "skip"].includes(o.onec_status)) throw new HttpError(400, "Заказ уже отправлен в 1С или ждёт отправки");
+  if (!(await getSettings()).onecOrders) throw new HttpError(400, "Отправка заказов в 1С выключена в настройках");
   await q("UPDATE orders SET onec_status = 'pending', onec_error = NULL, updated_at = now() WHERE id = $1", [o.id]);
   return { ok: true };
 }
 
 // ===== для агента 1С =====
 export async function pendingFor1C() {
+  if (!(await getSettings()).onecOrders) return [];
   const { rows } = await q(
     `SELECT o.id, o.client_code, o.client_name, o.manager, o.comment, o.delivery_date, o.price_type, o.total, o.created_at,
             u.name AS creator,

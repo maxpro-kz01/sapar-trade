@@ -118,7 +118,8 @@ for (const [size, vp] of [["phone", [375, 812]], ["desktop", [1366, 800]]]) {
 const vp = [375, 812];
 let p2 = await open(vp);
 await login(p2, "director", "Passw0rd1");
-check(!(await navs(p2)).includes("Финансы") && (await navs(p2)).includes("Команда"), "директор: есть Команда, нет Финансов");
+// с ТЗ финансов v1.2 директор видит «Финансы», но только «Поступило от покупателей» (проверяется в money-shots.mjs)
+check((await navs(p2)).includes("Финансы") && (await navs(p2)).includes("Команда"), "директор: есть Команда и Финансы (только поступления)");
 const dh = await text(p2);
 check(/Маржа/.test(dh) && !/Себестоимость|Валовая/.test(dh), "директор: маржа есть, себестоимости и валовой нет");
 await tab(p2, "Команда");

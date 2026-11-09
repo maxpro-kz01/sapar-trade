@@ -29,6 +29,30 @@ await post("stock", { rows: prods.flatMap((p, i) => [{ warehouse: "000000001", p
 await post("debts", { rows: clients.slice(0, 15).map((c, i) => ({ client: c.code, docDate: day(-(i * 3)), docName: "Реализация товаров 000" + i, amount: 20000 + i * 15000 })) });
 await post("sales", { from: day(-40), to: day(0), rows: sales });
 await post("cost", { from: day(-40), to: day(0), rows: cost });
+// ТЗ финансов v1.2: ТП клиентов из мобильного агента, деньги и движение по статьям
+await post("client_agents", { rows: clients.map((c, i) => ({ client: c.code, agent: i % 3 === 0 ? "Иванов Пётр" : "Ахметов Ержан", source: 1, docs: 3 + (i % 4), lastDay: day(-(i % 9)) })) });
+await post("cash", { rows: [
+  { account: "Основная касса", kind: "Наличные", amount: -2685604.51 }, { account: "Сапар трейд касспий", kind: "Безналичные", amount: 13272017.1 },
+  { account: "Народный Банк", kind: "Безналичные", amount: 1650225.02 }, { account: "Депозит ИП Сапар", kind: "Безналичные", amount: 6711556 },
+] });
+const arts = [["1Оплата покупателя", "Поступление"], ["Оплата платежной картой", "Поступление"], ["Оплата поставщику", "Выбытие"], ["Деньги в пути", "Выбытие"],
+  ["Выплаты по заработной плате", "Выбытие"], ["Расходы Сапар", "Выбытие"], ["ГСМ", "Выбытие"], ["Доставка", "Выбытие"], ["Ремонт машины", "Выбытие"], ["Услуги связи", "Выбытие"]];
+await post("cf_articles", { rows: arts.map(([name, kind]) => ({ name, kind, activity: "Операционная деятельность" })) });
+const flow = [];
+for (let d = -40; d <= 0; d++) {
+  flow.push({ dt: day(d), account: "Основная касса", article: "1Оплата покупателя", dir: "Приход", amount: 400000 + Math.round(rnd() * 300000) });
+  flow.push({ dt: day(d), account: "Сапар трейд касспий", article: "Оплата платежной картой", dir: "Приход", amount: 200000 + Math.round(rnd() * 200000) });
+  flow.push({ dt: day(d), account: "Сапар трейд касспий", article: "Оплата поставщику", dir: "Расход", amount: 450000 + Math.round(rnd() * 250000) });
+  flow.push({ dt: day(d), account: "Основная касса", article: "Деньги в пути", dir: "Расход", amount: 150000 });
+  flow.push({ dt: day(d), account: "Сапар трейд касспий", article: "Деньги в пути", dir: "Приход", amount: 150000 });
+  flow.push({ dt: day(d), account: "Основная касса", article: "ГСМ", dir: "Расход", amount: 15000 + Math.round(rnd() * 10000) });
+  if (d % 7 === 0) flow.push({ dt: day(d), account: "Основная касса", article: "Расходы Сапар", dir: "Расход", amount: 120000 });
+  if (d % 15 === 0) flow.push({ dt: day(d), account: "Основная касса", article: "Выплаты по заработной плате", dir: "Расход", amount: 900000 });
+  if (d % 5 === 0) flow.push({ dt: day(d), account: "Основная касса", article: "Доставка", dir: "Расход", amount: 60000 });
+  if (d % 10 === 0) flow.push({ dt: day(d), account: "Основная касса", article: "Ремонт машины", dir: "Расход", amount: 45000 });
+  if (d === -3) flow.push({ dt: day(d), account: "Основная касса", article: "", dir: "Расход", amount: 12000 });
+}
+await post("cashflow", { from: day(-40), to: day(0), rows: flow });
 
 const login = async (l, p) => (await (await fetch(B + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ login: l, password: p }) })).json()).token;
 const t = await login("owner", "Owner12345");

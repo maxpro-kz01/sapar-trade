@@ -1,9 +1,9 @@
-// Клиенты и дебиторка: долг, возраст долга (0–7, 8–14, 15–30, 30+ дней), последняя покупка, «спящие» клиенты.
+// Клиенты и дебиторка: долг, возраст долга по дате документа (0–7 … 90+ дней, без документа), последняя покупка, «спящие» клиенты.
 import { q } from "../db/pool.js";
 import { config } from "../config.js";
 import { scopeOf, managersOf } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
-import { round2, lim, stripForRole, freshness, overdueDate, today, shiftDay } from "./scope.js";
+import { round2, lim, stripForRole, freshness, overdueDate, overdueSql, today, shiftDay } from "./scope.js";
 
 export async function clients(user, { search, from, to, onlyDebtors, sleeping, manager, limit }) {
   const debtScope = scopeOf(user, "debts");
@@ -26,11 +26,13 @@ export async function clients(user, { search, from, to, onlyDebtors, sleeping, m
     FROM onec_clients c
     LEFT JOIN (SELECT client_code,
                       sum(amount) FILTER (WHERE amount > 0) AS total,
-                      sum(amount) FILTER (WHERE amount > 0 AND doc_date < $1) AS overdue,
+                      sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}) AS overdue,
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date >= $4::date - 7) AS b0,
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 7 AND doc_date >= $4::date - 14) AS b8,
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 14 AND doc_date >= $4::date - 30) AS b15,
-                      sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 30) AS b30,
+                      sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 30 AND doc_date >= $4::date - 60) AS b31,
+                      sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 60 AND doc_date >= $4::date - 90) AS b61,
+                      sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 90) AS b90,
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date IS NULL) AS bnone,
                       min(doc_date) FILTER (WHERE amount > 0) AS oldest
                FROM onec_debts GROUP BY 1) d ON d.client_code = c.code
@@ -45,7 +47,7 @@ export async function clients(user, { search, from, to, onlyDebtors, sleeping, m
        ORDER BY overdue DESC, debt DESC, revenue DESC, c.name LIMIT ${lim(limit, 300, 3000)}`, p),
     q(`SELECT count(*) AS clients, coalesce(sum(d.total),0) AS debt, coalesce(sum(d.overdue),0) AS overdue,
               coalesce(sum(d.b0),0) AS b0, coalesce(sum(d.b8),0) AS b8, coalesce(sum(d.b15),0) AS b15,
-              coalesce(sum(d.b30),0) AS b30, coalesce(sum(d.bnone),0) AS bnone,
+              coalesce(sum(d.b31),0) AS b31, coalesce(sum(d.b61),0) AS b61, coalesce(sum(d.b90),0) AS b90, coalesce(sum(d.bnone),0) AS bnone,
               count(*) FILTER (WHERE coalesce(d.total,0) > 0) AS debtors,
               count(*) FILTER (WHERE coalesce(s.revenue,0) > 0) AS buyers
        ${base}`, p),
@@ -56,8 +58,9 @@ export async function clients(user, { search, from, to, onlyDebtors, sleeping, m
     debt: round2(S.debt), overdue: round2(S.overdue), debtors: Number(S.debtors),
     aging: [
       { label: "0–7 дней", amount: round2(S.b0) }, { label: "8–14 дней", amount: round2(S.b8) },
-      { label: "15–30 дней", amount: round2(S.b15) }, { label: "больше 30 дней", amount: round2(S.b30) },
-      ...(Number(S.bnone) ? [{ label: "без даты", amount: round2(S.bnone) }] : []),
+      { label: "15–30 дней", amount: round2(S.b15) }, { label: "31–60 дней", amount: round2(S.b31) },
+      { label: "61–90 дней", amount: round2(S.b61) }, { label: "больше 90 дней", amount: round2(S.b90) },
+      ...(Number(S.bnone) ? [{ label: "без документа (старые)", amount: round2(S.bnone) }] : []),
     ],
   });
   if (salesScope) summary.buyers = Number(S.buyers);

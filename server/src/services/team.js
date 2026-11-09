@@ -3,7 +3,7 @@
 import { q } from "../db/pool.js";
 import { can, scopeOf, managersOf } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
-import { round2, pct, stripForRole, freshness, overdueDate, UNIT_COST_CTE, prorate } from "./scope.js";
+import { round2, pct, stripForRole, freshness, overdueDate, overdueSql, UNIT_COST_CTE, prorate } from "./scope.js";
 
 export async function team(user, range) {
   const scope = scopeOf(user, "team");
@@ -27,7 +27,7 @@ export async function team(user, range) {
             WHERE s.day BETWEEN $1 AND $2 GROUP BY 1),
      ever AS (SELECT c.manager, max(s.day) AS last_day FROM onec_sales_daily s JOIN onec_clients c ON c.code = s.client_code GROUP BY 1),
      db AS (SELECT c.manager, sum(d.amount) FILTER (WHERE d.amount > 0) AS debt,
-                   sum(d.amount) FILTER (WHERE d.amount > 0 AND d.doc_date < $3) AS overdue
+                   sum(d.amount) FILTER (WHERE d.amount > 0 AND ${overdueSql("d.", "$3")}) AS overdue
             FROM onec_debts d JOIN onec_clients c ON c.code = d.client_code GROUP BY 1),
      pl AS (SELECT manager, json_agg(json_build_object('month', to_char(month,'YYYY-MM-DD'), 'amount', amount)) AS plans
             FROM sales_plans WHERE month BETWEEN $4 AND $2 GROUP BY 1),

@@ -2,7 +2,8 @@
 // Разделы показываются по правам: интеграция (владелец, директор, бухгалтер), сотрудники и журнал (владелец).
 
 const MG_AUDIT_ACTIONS = { "login.ok": "Вход", "login.fail": "Неудачный вход", "user.create": "Создан сотрудник", "user.update": "Изменён сотрудник",
-  "password.change": "Смена пароля", "logout.all": "Выход на всех устройствах", export: "Выгрузка", "plans.save": "План продаж", "task.create": "Новая задача", "task.update": "Изменена задача" };
+  "password.change": "Смена пароля", "logout.all": "Выход на всех устройствах", export: "Выгрузка", "plans.save": "План продаж", "task.create": "Новая задача", "task.update": "Изменена задача",
+  "cf_article.group": "Группа статьи денег", "trip.start": "Начат рейс", "trip.end": "Завершён рейс", "settings.save": "Настройки" };
 
 function MgAudit({ session, authLost }) {
   const r = useLive(session, "/api/audit", authLost);

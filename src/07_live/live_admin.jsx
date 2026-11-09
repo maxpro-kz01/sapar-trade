@@ -1,7 +1,8 @@
 // Sapar Trade — рабочая версия. Модуль: Интеграция 1С (статус загрузок), Сотрудники, смена пароля
 // Сотрудники — для владельца и администратора (администратор не видит и не создаёт владельца/директора).
 
-const LIVE_ENTITY_NAMES = { products: "Товары", warehouses: "Склады", clients: "Клиенты", prices: "Цены", stock: "Остатки", debts: "Долги клиентов", sales: "Продажи", cost: "Себестоимость" };
+const LIVE_ENTITY_NAMES = { products: "Товары", warehouses: "Склады", clients: "Клиенты", prices: "Цены", stock: "Остатки", debts: "Долги клиентов", sales: "Продажи", cost: "Себестоимость",
+  client_agents: "ТП клиентов", cash: "Остатки денег", cashflow: "Движение денег", cf_articles: "Статьи движения денег" };
 const LIVE_ROLES = { owner: "Владелец", director: "Директор", supervisor: "Супервайзер", tp: "Торговый представитель", accountant: "Бухгалтер", financier: "Финансист", warehouse: "Склад", admin: "Администратор", driver: "Водитель-экспедитор" };
 
 function LiveSync({ session, authLost }) {
@@ -81,7 +82,10 @@ function LiveUsers({ session, authLost, showToast }) {
             {roles.map(([id, l]) => <option key={id} value={id}>{l}</option>)}
           </select>
           {["tp", "supervisor"].includes(form.role) && (
-            <Field label="Менеджер в 1С (как в карточке клиента; несколько — через запятую)" value={form.manager1c} onChange={(e) => setForm({ ...form, manager1c: e.target.value })} />
+            <>
+              <Field label="ТП в 1С (выберите ниже; супервайзеру — несколько через запятую)" value={form.manager1c} onChange={(e) => setForm({ ...form, manager1c: e.target.value })} />
+              <LiveAgentPicker session={session} value={form.manager1c} multi={form.role === "supervisor"} onPick={(v) => setForm({ ...form, manager1c: v })} />
+            </>
           )}
           <Field label="Пароль (не меньше 8 символов, буквы и цифры)" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           {err && <p style={{ fontSize: 12, color: "var(--red)", marginBottom: 10 }}>{err}</p>}
@@ -89,6 +93,25 @@ function LiveUsers({ session, authLost, showToast }) {
         </Modal>
       )}
     </>
+  );
+}
+
+// Имена ТП, найденные в 1С (мобильный агент в реализациях), — чтобы не набирать вручную и не ошибиться
+function LiveAgentPicker({ session, value, multi, onPick }) {
+  const r = useLive(session, "/api/users/agents-1c");
+  const chosen = String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!r.data) return r.loading ? <p style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>Загрузка списка ТП из 1С…</p> : null;
+  if (!r.data.length) return <p style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>Список ТП из 1С пока пуст — обновите агент на сервере 1С.</p>;
+  const pick = (name) => {
+    if (!multi) return onPick(name);
+    onPick((chosen.includes(name) ? chosen.filter((x) => x !== name) : [...chosen, name]).join(", "));
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-3" style={{ maxHeight: 180, overflowY: "auto" }}>
+      {r.data.map((a) => (
+        <LiveChip key={a.name} on={chosen.includes(a.name)} onClick={() => pick(a.name)}>{a.name} · {a.clients}</LiveChip>
+      ))}
+    </div>
   );
 }
 

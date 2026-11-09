@@ -1,4 +1,4 @@
-# Проверка без 1С: функции агента (JSON, gzip, HTTP) против локального сервера.
+﻿# Проверка без 1С: функции агента (JSON, gzip, HTTP) против локального сервера.
 #   pwsh agent/tests/smoke.ps1 -Url http://127.0.0.1:3999 -Key test-agent-key-0123456789
 param([string]$Url, [string]$Key)
 $ErrorActionPreference = 'Stop'
@@ -35,4 +35,13 @@ $d = (Get-Date).Date
 Send sales @('dt','product','client','qty','revenue') ([ordered]@{ from = $d.AddDays(-3); to = $d }) @($d,'00001','К-001',[decimal]2,[decimal]31001)
 Send cost @('dt','product','qty','cost') ([ordered]@{ from = $d.AddDays(-3); to = $d }) @($d,'00001',[decimal]2,[decimal]24000)
 try { Send sales @('dt','product') ([ordered]@{ from = $d; to = $d }) @('вчера','1') } catch { "ожидаемая ошибка: $($_.Exception.Message.Substring(0, [Math]::Min(80, $_.Exception.Message.Length)))" }
+# ТЗ финансов v1.2: ТП клиентов, деньги, статьи
+Send client_agents @('client','agent','source','docs','lastDay') $none @('К-001','Сулейменова Аида Сериковна ',[decimal]1,[decimal]5,$d) @('К-001','бд',[decimal]2,[decimal]0,[datetime]'0001-01-01')
+Send cash @('account','kind','amount') $none @('Основная касса','Наличные',[decimal]-26856049.51) @('Сапар трейд касспий','Безналичные',[decimal]13272017.1)
+Send cf_articles @('name','kind','activity') $none @('ГСМ','Выбытие','Операционная деятельность') @('1Оплата покупателя','Поступление','Операционная деятельность')
+Send cashflow @('dt','account','article','dir','amount') ([ordered]@{ from = $d.AddDays(-3); to = $d }) @($d,'Основная касса','ГСМ','Расход',[decimal]6000) @($d,'Основная касса','1Оплата покупателя','Приход',[decimal]50000)
+# заказы для 1С: пустая очередь раскрывается в 0 элементов; ответ по несуществующему заказу — ошибка 404
+$pending = @(Expand-List (Invoke-Server 'GET' '/api/sync/1c/orders/pending' $null $Key))
+"заказов в очереди: $($pending.Count)"
+try { Send-OrderResult $Key 999999 $true '00000033001' } catch { "ответ по чужому заказу: $($_.Exception.Message.Substring(0, 22))" }
 try { $Key = 'wrong-key'; Invoke-Server 'GET' '/api/sync/1c/ping' $null $Key } catch { "неверный ключ: $($_.Exception.Message.Substring(0, 30))" }

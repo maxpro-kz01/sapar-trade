@@ -26,6 +26,8 @@
  "06_management/mg_clients.jsx",
  "06_management/mg_stock.jsx",
  "06_management/mg_finance.jsx",
+ "06_management/mg_money.jsx",
+ "06_management/mg_cf_articles.jsx",
  "06_management/mg_problems.jsx",
  "10_fleet/fleet_core.js",
  "10_fleet/fleet_map.jsx",

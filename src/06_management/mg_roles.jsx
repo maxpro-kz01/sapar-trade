@@ -17,7 +17,7 @@ function mgTabsFor(session) {
     can("fleet.view") && "fleet",
     can("debts", "debts.own", "sales", "sales.own") && "clients",
     can("stock") && "stock",
-    can("gross") && "finance",
+    can("gross", "cash", "cash.in") && "finance",
     "problems", "tasks", "ai",
     can("sync", "users", "audit") && "system",
   ].filter(Boolean);

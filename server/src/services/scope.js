@@ -55,6 +55,8 @@ export { shiftDay };
 export const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000) + 1;
 export const today = () => todayLocal();
 export const overdueDate = () => shiftDay(todayLocal(), -config.overdueDays);
+// Просрочка: документ старше срока; долг без документа (начальные остатки, перенос) — тоже просрочен
+export const overdueSql = (alias, param) => `(${alias}doc_date IS NULL OR ${alias}doc_date < ${param})`;
 
 // Предыдущий период той же длины, сразу перед выбранным
 export function prevRange({ from, to }) {

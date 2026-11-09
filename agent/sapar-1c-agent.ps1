@@ -18,12 +18,16 @@
   Загрузить историю продаж и себестоимости за N дней (по месяцам). Пример: -Backfill 400
 .PARAMETER Only
   Выполнить только указанные типы данных сейчас, без учёта расписания. Пример: -Only stock,prices
+.PARAMETER TryOrder
+  Проверка создания «Реализации» в 1С на примере последней продажи: документ записывается внутри транзакции
+  и сразу отменяется — в базе ничего не остаётся. Показывает, хватает ли прав и все ли поля заполняются.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1 -SetSecrets
   powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1 -Test
   powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1 -Probe
   powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1 -Backfill 400
+  powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1 -TryOrder
   powershell -ExecutionPolicy Bypass -File .\sapar-1c-agent.ps1
 #>
 [CmdletBinding()]
@@ -33,6 +37,7 @@ param(
   [switch]$Probe,
   [int]$Backfill = 0,
   [string[]]$Only = @(),
+  [switch]$TryOrder,
   [string]$ConfigPath = ''
 )
 
@@ -44,11 +49,26 @@ if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
-$AgentVersion = '1.1.0'
+$AgentVersion = '1.2.0'
 
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
 $Cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+# Расписание по умолчанию (минуты). Типы, которых нет в config.json, берутся отсюда —
+# так новые выгрузки начинают работать после обновления агента без правки config.json.
+$DefaultSchedule = [ordered]@{
+  stock = 5; prices = 5; sales = 5; cost = 5; debts = 5; cash = 5; cashflow = 5
+  products = 60; clients = 60; client_agents = 60; cf_articles = 1440; warehouses = 1440
+}
+if (-not $Cfg.PSObject.Properties['schedule']) { $Cfg | Add-Member -NotePropertyName schedule -NotePropertyValue (New-Object psobject) }
+foreach ($k in $DefaultSchedule.Keys) {
+  if (-not $Cfg.schedule.PSObject.Properties[$k]) { $Cfg.schedule | Add-Member -NotePropertyName $k -NotePropertyValue $DefaultSchedule[$k] }
+}
+# Заказы из приложения → «Реализация» в 1С (непроведённая). Коды — из диагностики базы; можно переопределить в config.json.
+$OrderCfg = @{ orgCode = '000000001'; warehouseCode = '000000001'; priceType = 'Цена Прайс' }
+if ($Cfg.PSObject.Properties['orders']) { foreach ($p in $Cfg.orders.PSObject.Properties) { $OrderCfg[$p.Name] = [string]$p.Value } }
+$RangeEntities = @('sales', 'cost', 'cashflow')   # выгружаются за период (от/до)
+
 $LogDir = Join-Path $Root 'logs'
 $StatePath = Join-Path $Root 'state.json'
 $SecretsPath = Join-Path $Root 'secrets.dat'
@@ -233,7 +253,9 @@ function Invoke-1CQuery($Conn, [string]$Text, [hashtable]$Params) {
 
 function Get-Params([string]$Entity, [datetime]$From, [datetime]$To) {
   $p = @{ 'Сейчас' = [datetime]::Now }
-  if ($Entity -in @('sales', 'cost')) { $p['Начало'] = $From.Date; $p['Конец'] = $To.Date.AddDays(1).AddSeconds(-1) }
+  if ($Entity -in $RangeEntities) { $p['Начало'] = $From.Date; $p['Конец'] = $To.Date.AddDays(1).AddSeconds(-1) }
+  # ТП клиента — по реализациям за последние 90 дней
+  if ($Entity -eq 'client_agents') { $p['Начало'] = (Get-Date).Date.AddDays(-90); $p['Конец'] = [datetime]::Now }
   return $p
 }
 
@@ -241,7 +263,7 @@ function Sync-Entity($Conn, [string]$Entity, [string]$AgentKey, [datetime]$From,
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $data = Invoke-1CQuery $Conn (Get-QueryText $Entity) (Get-Params $Entity $From $To)
   $extra = [ordered]@{ agentVersion = $AgentVersion }
-  if ($Entity -in @('sales', 'cost')) { $extra['from'] = $From.Date; $extra['to'] = $To.Date }
+  if ($Entity -in $RangeEntities) { $extra['from'] = $From.Date; $extra['to'] = $To.Date }
   $json = New-Payload $data.Columns $data.Rows $extra
   $read = $sw.Elapsed.TotalSeconds
   $r = Invoke-Server 'POST' "/api/sync/1c/$Entity" $json $AgentKey
@@ -259,6 +281,138 @@ function Get-Due($State) {
     if (-not $last -or ($now - [datetime]::Parse($last.Value, $Inv)).TotalMinutes -ge ([int]$p.Value - 1)) { $due += $p.Name }
   }
   return $due
+}
+
+# ---------- заказы из приложения → «Реализация товаров и услуг» в 1С (ТЗ финансов v1.2, часть D) ----------
+# Документ только ЗАПИСЫВАЕТСЯ, не проводится: остатки и долги не меняются, пока оператор не проверит и не проведёт.
+function Test-Empty($Ref) { return [bool](Com-Call $Ref 'Пустая') }
+function Find-ByCode($Conn, [string]$Catalog, [string]$Code, [string]$What) {
+  $ref = Com-Call (Com-Get (Com-Get $Conn 'Справочники') $Catalog) 'НайтиПоКоду' @($Code)
+  if (Test-Empty $ref) { throw "$What с кодом $Code не найден в 1С" }
+  return ,$ref
+}
+function Find-ByName($Conn, [string]$Catalog, [string]$Name, [string]$What) {
+  $ref = Com-Call (Com-Get (Com-Get $Conn 'Справочники') $Catalog) 'НайтиПоНаименованию' @($Name, $true)
+  if (Test-Empty $ref) { throw "$What «$Name» не найден в 1С" }
+  return ,$ref
+}
+
+# Уже создан? Ищем по метке «Sapar Trade СТ-000123» в комментарии (защита от дублей, если ответ сервера потерялся)
+function Find-SaleByMark($Conn, [string]$Mark) {
+  $text = 'ВЫБРАТЬ ПЕРВЫЕ 1 Р.Номер КАК n ИЗ Документ.РеализацияТоваровУслуг КАК Р ' +
+          'ГДЕ Р.Дата >= &С И НЕ Р.ПометкаУдаления И ВЫРАЗИТЬ(Р.Комментарий КАК СТРОКА(200)) ПОДОБНО &Метка'
+  $r = Invoke-1CQuery $Conn $text @{ 'С' = (Get-Date).Date.AddDays(-30); 'Метка' = ($Mark + '%') }
+  if ($r.Rows.Count) { return [string]$r.Rows[0][0] }
+  return $null
+}
+
+# Создать (записать, не проводя) реализацию по заказу. Возвращает номер документа 1С.
+function New-1CSale($Conn, $Order) {
+  $mark = "Sapar Trade $($Order.number)"
+  $client = Find-ByCode $Conn 'Контрагенты' ([string]$Order.client_code) 'Клиент'
+  $contract = Com-Get $client 'ОсновнойДоговорКонтрагента'
+  if (Test-Empty $contract) { throw "У клиента $($Order.client_code) не указан основной договор в 1С" }
+  $org = Find-ByCode $Conn 'Организации' $OrderCfg.orgCode 'Организация'
+  $wh = Find-ByCode $Conn 'Склады' $OrderCfg.warehouseCode 'Склад'
+  $pt = Find-ByName $Conn 'ТипыЦенНоменклатуры' $OrderCfg.priceType 'Тип цен'
+  $opKind = Com-Get (Com-Get (Com-Get $Conn 'Перечисления') 'ВидыОперацийРеализацияТоваров') 'ПродажаКомиссия'
+
+  $doc = Com-Call (Com-Get (Com-Get $Conn 'Документы') 'РеализацияТоваровУслуг') 'СоздатьДокумент'
+  $when = Get-Date
+  if ($Order.created_at) { $when = [datetime]::Parse([string]$Order.created_at, $Inv, [Globalization.DateTimeStyles]::AdjustToUniversal).ToLocalTime() }
+  Com-Set $doc 'Дата' $when
+  Com-Set $doc 'Организация' $org
+  Com-Set $doc 'Контрагент' $client
+  Com-Set $doc 'ДоговорКонтрагента' $contract
+  Com-Set $doc 'Склад' $wh
+  Com-Set $doc 'ТипЦен' $pt
+  Com-Set $doc 'ВалютаДокумента' (Com-Get $contract 'ВалютаВзаиморасчетов')
+  Com-Set $doc 'КурсВзаиморасчетов' 1
+  Com-Set $doc 'КратностьВзаиморасчетов' 1
+  Com-Set $doc 'ВидОперации' $opKind
+  Com-Set $doc 'УчитыватьНДС' $false          # как в текущих реализациях базы
+  Com-Set $doc 'СуммаВключаетНДС' $false
+  Com-Set $doc 'ОтражатьВУправленческомУчете' $true
+  Com-Set $doc 'ОтражатьВБухгалтерскомУчете' $true
+  $note = $mark
+  if ($Order.manager) { $note += " · ТП $($Order.manager)" }
+  if ($Order.comment) { $note += " · $($Order.comment)" }
+  Com-Set $doc 'Комментарий' $note
+
+  $rows = Com-Get $doc 'Товары'
+  $total = [decimal]0
+  foreach ($it in @($Order.items)) {
+    $nom = Find-ByCode $Conn 'Номенклатура' ([string]$it.code) 'Товар'
+    $row = Com-Call $rows 'Добавить'
+    Com-Set $row 'Номенклатура' $nom
+    $unit = Com-Get $nom 'ЕдиницаХраненияОстатков'
+    Com-Set $row 'ЕдиницаИзмерения' $unit
+    $k = 1
+    try { $k = Com-Get $unit 'Коэффициент'; if (-not $k) { $k = 1 } } catch { $k = 1 }
+    Com-Set $row 'Коэффициент' $k
+    Com-Set $row 'Количество' ([decimal]$it.qty)
+    Com-Set $row 'Цена' ([decimal]$it.price)
+    Com-Set $row 'Сумма' ([decimal]$it.sum)
+    Com-Set $row 'СтавкаНДС' (Com-Get $nom 'СтавкаНДС')
+    Com-Set $row 'Склад' $wh
+    $total += [decimal]$it.sum
+  }
+  Com-Set $doc 'СуммаДокумента' $total
+  $mode = Com-Get (Com-Get $Conn 'РежимЗаписиДокумента') 'Запись'
+  [void](Com-Call $doc 'Записать' @($mode))
+  return [string](Com-Get $doc 'Номер')
+}
+
+function Send-OrderResult([string]$AgentKey, $Id, [bool]$Ok, [string]$Text) {
+  if ($Ok) { $json = '{"ok":true,"number":' + (ConvertTo-JsonString $Text) + '}' }
+  else { $json = '{"ok":false,"error":' + (ConvertTo-JsonString $Text) + '}' }
+  [void](Invoke-Server 'POST' "/api/sync/1c/orders/$Id/result" $json $AgentKey)
+}
+
+# Забрать с сервера новые заказы (если отправка в 1С включена в настройках) и создать по ним реализации
+# Windows PowerShell 5.1 отдаёт JSON-массив из ConvertFrom-Json одним объектом — раскрываем на элементы
+function Expand-List($x) { foreach ($i in @($x)) { if ($i -is [array]) { foreach ($j in $i) { $j } } elseif ($null -ne $i) { $i } } }
+
+function Push-Orders($Conn, [string]$AgentKey) {
+  $list = @(Expand-List (Invoke-Server 'GET' '/api/sync/1c/orders/pending' $null $AgentKey))
+  foreach ($o in $list) {
+    if ($null -eq $o -or -not $o.PSObject.Properties['id']) { continue }
+    try {
+      $num = Find-SaleByMark $Conn "Sapar Trade $($o.number)"
+      if (-not $num) { $num = New-1CSale $Conn $o }
+      Send-OrderResult $AgentKey $o.id $true $num
+      Write-Log 'INFO' "заказ $($o.number) → реализация $num (не проведена)"
+    } catch {
+      $msg = $_.Exception.Message
+      if ($_.Exception.InnerException) { $msg = $_.Exception.InnerException.Message }
+      Write-Log 'ERROR' "заказ $($o.number): $msg"
+      try { Send-OrderResult $AgentKey $o.id $false $msg } catch { Write-Log 'ERROR' "заказ $($o.number): не удалось сообщить серверу: $($_.Exception.Message)" }
+    }
+  }
+}
+
+# Проверка без последствий: реализация по образцу последней продажи записывается в транзакции и отменяется
+function Invoke-TryOrder($Conn) {
+  $q = 'ВЫБРАТЬ ПЕРВЫЕ 1 Т.Ссылка.Контрагент.Код КАК client, Т.Номенклатура.Код КАК product, Т.Цена КАК price ' +
+       'ИЗ Документ.РеализацияТоваровУслуг.Товары КАК Т ГДЕ Т.Ссылка.Проведен И Т.Цена > 0 УПОРЯДОЧИТЬ ПО Т.Ссылка.Дата УБЫВ'
+  $r = Invoke-1CQuery $Conn $q @{}
+  if (-not $r.Rows.Count) { throw 'В 1С нет проведённых реализаций для образца' }
+  $x = $r.Rows[0]
+  $order = [pscustomobject]@{ number = 'СТ-ПРОВЕРКА'; client_code = [string]$x[0]; manager = ''; comment = 'проверка, будет отменена'
+    created_at = $null; items = @([pscustomobject]@{ code = [string]$x[1]; qty = 1; price = $x[2]; sum = $x[2] }) }
+  Write-Host "Образец: клиент $($order.client_code), товар $($order.items[0].code), цена $($x[2])"
+  [void](Com-Call $Conn 'НачатьТранзакцию')
+  try {
+    $num = New-1CSale $Conn $order
+    Write-Host "ПРОВЕРКА ПРОШЛА: реализация записывается (номер был бы $num). Изменения отменены — в 1С ничего не осталось." -ForegroundColor Green
+  } catch {
+    $msg = $_.Exception.Message
+    if ($_.Exception.InnerException) { $msg = $_.Exception.InnerException.Message }
+    Write-Host "НЕ ПОЛУЧИЛОСЬ: $msg" -ForegroundColor Red
+    Write-Host 'Сфотографируйте этот экран и отправьте разработчику.' -ForegroundColor Yellow
+  } finally {
+    try { [void](Com-Call $Conn 'ОтменитьТранзакцию') } catch { }
+  }
 }
 
 # ---------- режимы ----------
@@ -361,7 +515,7 @@ function Invoke-Backfill($Conn, [string]$AgentKey, [int]$Days) {
   while ($cur -le $end) {
     $monthEnd = (New-Object DateTime $cur.Year, $cur.Month, 1).AddMonths(1).AddDays(-1)
     if ($monthEnd -gt $end) { $monthEnd = $end }
-    foreach ($e in @('sales', 'cost')) {
+    foreach ($e in $RangeEntities) {
       try { Sync-Entity $Conn $e $AgentKey $cur $monthEnd }
       catch { Write-Log 'ERROR' ("{0} {1:yyyy-MM-dd}..{2:yyyy-MM-dd}: {3}" -f $e, $cur, $monthEnd, $_.Exception.Message) }
     }
@@ -398,12 +552,12 @@ try {
 
   $conn = Connect-1C $sec.OnecPassword
   if ($Probe) { Invoke-Probe $conn; return }
+  if ($TryOrder) { Invoke-TryOrder $conn; return }
   if (-not $sec.AgentKey) { throw 'Ключ агента не задан. Получите его у разработчика и выполните -SetSecrets ещё раз.' }
   if ($Backfill -gt 0) { Invoke-Backfill $conn $sec.AgentKey $Backfill; return }
 
   $state = Read-State
-  $due = if ($Only.Count) { $Only } else { Get-Due $state }
-  if (-not $due.Count) { return }
+  $due = @(if ($Only.Count) { $Only } else { Get-Due $state })
   $to = (Get-Date).Date
   $from = $to.AddDays(-[int]$Cfg.salesLookbackDays)
   $errors = 0
@@ -417,6 +571,10 @@ try {
     }
   }
   Save-State $state
+  # заказы из приложения — при каждом обычном запуске (сервер отдаёт их, только если отправка в 1С включена)
+  if (-not $Only.Count) {
+    try { Push-Orders $conn $sec.AgentKey } catch { $errors++; Write-Log 'ERROR' "заказы: $($_.Exception.Message)" }
+  }
   if ($errors) { exit 1 }
 } catch {
   Write-Log 'ERROR' $_.Exception.Message

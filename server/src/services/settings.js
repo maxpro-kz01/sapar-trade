@@ -3,7 +3,8 @@ import { q } from "../db/pool.js";
 import { can } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
 
-export const DEFAULTS = { directorPhone: "+7 700 105 17 17" };
+// onecOrders — агент создаёт в 1С «Реализацию» (непроведённую) по заказам из приложения (ТЗ финансов v1.2, часть D)
+export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false };
 
 export async function getSettings() {
   const { rows } = await q("SELECT key, value FROM settings");
@@ -19,6 +20,10 @@ export async function saveSettings(user, b) {
     const d = String(b.directorPhone).replace(/\D/g, "");
     if (!/^7\d{10}$/.test(d)) throw new HttpError(400, "Телефон в формате +7 7XX XXX XX XX");
     saved.directorPhone = `+7 ${d.slice(1, 4)} ${d.slice(4, 7)} ${d.slice(7, 9)} ${d.slice(9, 11)}`;
+  }
+  if (b?.onecOrders !== undefined) {
+    if (typeof b.onecOrders !== "boolean") throw new HttpError(400, "onecOrders: да или нет");
+    saved.onecOrders = b.onecOrders;
   }
   for (const [k, v] of Object.entries(saved))
     await q(`INSERT INTO settings(key, value, updated_by) VALUES ($1,$2,$3)

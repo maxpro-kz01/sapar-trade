@@ -4,6 +4,7 @@ import { ah, period } from "../lib/http.js";
 import { requireAuth, requirePerm } from "../middleware/auth.js";
 import { team, getPlans, savePlans } from "../services/team.js";
 import { finance } from "../services/reports.js";
+import { money, listArticles, setArticleGroup } from "../services/money.js";
 import { problems } from "../services/problems.js";
 import * as tasks from "../services/tasks.js";
 import { audit } from "../services/audit.js";
@@ -14,6 +15,13 @@ r.use(requireAuth);
 
 r.get("/team", ah(async (req, res) => res.json(await team(req.user, period(req.query)))));
 r.get("/finance", ah(async (req, res) => res.json(await finance(req.user, period(req.query)))));
+r.get("/money", ah(async (req, res) => res.json(await money(req.user, period(req.query)))));
+r.get("/cf-articles", ah(async (req, res) => res.json(await listArticles(req.user))));
+r.put("/cf-articles", ah(async (req, res) => {
+  const out = await setArticleGroup(req.user, req.body?.article, req.body?.grp);
+  await audit(req, "cf_article.group", req.body?.article, { grp: req.body?.grp });
+  res.json(out);
+}));
 r.get("/problems", ah(async (req, res) => res.json(await problems(req.user))));
 
 r.get("/plans", ah(async (req, res) => res.json(await getPlans(req.user, req.query.month))));

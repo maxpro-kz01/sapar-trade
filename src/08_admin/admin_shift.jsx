@@ -73,10 +73,33 @@ function AdminSettingsLive({ session, authLost, showToast }) {
     try { const s = await stApi("/api/settings", { method: "PUT", token: session.token, body: { directorPhone: phone } }); setPhone(s.directorPhone); showToast("Сохранено"); }
     catch (e) { showToast(e.message); }
   };
+  const toggle1c = async () => {
+    const on = !r.data.onecOrders;
+    if (on && !window.confirm("Включить отправку заказов в 1С? Новые заказы ТП будут создаваться в 1С как непроведённые «Реализации».")) return;
+    try { await stApi("/api/settings", { method: "PUT", token: session.token, body: { onecOrders: on } }); showToast(on ? "Отправка в 1С включена" : "Отправка в 1С выключена"); r.reload(); }
+    catch (e) { showToast(e.message); }
+  };
   return (
-    <MgCard>
-      <Field label="WhatsApp директора (для отчёта смены)" value={phone} inputMode="tel" onChange={(e) => setPhone(e.target.value)} />
-      <PrimaryButton full disabled={!liveCan(session, "settings")} onClick={save}>Сохранить</PrimaryButton>
-    </MgCard>
+    <>
+      <MgCard>
+        <Field label="WhatsApp директора (для отчёта смены)" value={phone} inputMode="tel" onChange={(e) => setPhone(e.target.value)} />
+        <PrimaryButton full disabled={!liveCan(session, "settings")} onClick={save}>Сохранить</PrimaryButton>
+      </MgCard>
+      <MgCard>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p style={{ fontSize: 13.5, fontWeight: 800 }}>Отправлять заказы в 1С</p>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.45 }}>
+              Заказ ТП создаётся в 1С как «Реализация товаров и услуг» <b>без проведения</b> — оператор проверяет и проводит.
+              Заказы, сделанные при выключенной отправке, можно отправить кнопкой в заказе.
+            </p>
+          </div>
+          <button onClick={toggle1c} disabled={!liveCan(session, "settings")} aria-pressed={!!r.data.onecOrders} title="Отправлять заказы в 1С"
+            className="rounded-full shrink-0" style={{ width: 48, height: 28, background: r.data.onecOrders ? "#1FA854" : "#C9C7D6", position: "relative" }}>
+            <span className="rounded-full" style={{ position: "absolute", top: 3, left: r.data.onecOrders ? 23 : 3, width: 22, height: 22, background: "#fff", transition: "left .15s" }} />
+          </button>
+        </div>
+      </MgCard>
+    </>
   );
 }

@@ -12,14 +12,15 @@
 //  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
 //  orders.manage — менять статус (принят/собран/отгружен); shift — смены администратора; settings — настройки
 //  fleet.send — водитель передаёт своё место в рейсе; fleet.view — карта экспедиторов и маршруты
+//  cash — остатки касс/счетов и движение денег по статьям; cash.in — только «поступило от покупателей» (директор)
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view"],
-  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage", "fleet.view"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash"],
+  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage", "fleet.view", "cash.in"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
-  accountant: ["sales", "debts", "sync", "orders.all"],
-  financier:  ["sales", "debts"],
+  accountant: ["sales", "debts", "sync", "orders.all", "cash"],
+  financier:  ["sales", "debts", "cash"],
   warehouse:  ["stock", "orders.all", "orders.manage"],
   admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings"],
   driver:     ["fleet.send"],

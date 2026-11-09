@@ -55,7 +55,7 @@ test("видимость заказов: ТП — свои, админ и скл
   const a = await api("GET", "/api/orders", { token: tok.adm });
   assert.equal(a.body.length, 1);
   assert.equal(a.body[0].items.length, 2);
-  assert.equal(a.body[0].onec_status, "pending");
+  assert.equal(a.body[0].onec_status, "skip", "отправка в 1С по умолчанию выключена");
   assert.equal((await api("GET", "/api/orders", { token: tok.sklad })).body.length, 1);
   assert.equal((await api("GET", "/api/orders", { token: tok.drv })).status, 403);
 });
@@ -70,6 +70,14 @@ test("статусы: порядок переходов и права", async ()
 
 test("очередь для 1С: агент забирает, сообщает номер; ошибки и повтор", async () => {
   assert.equal((await api("GET", "/api/sync/1c/orders/pending")).status, 401);
+  assert.equal((await api("GET", "/api/sync/1c/orders/pending", { agent: true })).body.length, 0, "выключено — агенту пусто");
+  assert.equal((await api("POST", `/api/orders/${orderId}/retry-1c`, { token: tok.adm })).status, 400, "выключено — вручную тоже нельзя");
+  assert.equal((await api("PUT", "/api/settings", { token: tok.adm, body: { onecOrders: "да" } })).status, 400);
+  assert.equal((await api("PUT", "/api/settings", { token: tok.tp1, body: { onecOrders: true } })).status, 403);
+  const st = await api("PUT", "/api/settings", { token: tok.owner, body: { onecOrders: true } });
+  assert.equal(st.body.onecOrders, true);
+  // заказ, созданный при выключенной отправке, отправляем вручную
+  assert.equal((await api("POST", `/api/orders/${orderId}/retry-1c`, { token: tok.adm })).status, 200);
   const p = await api("GET", "/api/sync/1c/orders/pending", { agent: true });
   assert.equal(p.body.length, 1);
   assert.equal(p.body[0].client_code, "К-001");

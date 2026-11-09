@@ -5,6 +5,7 @@ import { requireAuth, requirePerm } from "../middleware/auth.js";
 import { createUser, setPassword, publicUser } from "../services/users.js";
 import { audit } from "../services/audit.js";
 import { q } from "../db/pool.js";
+import { agentNames } from "../services/client_agents.js";
 
 const r = Router();
 r.use(requireAuth, requirePerm("users"));
@@ -16,6 +17,9 @@ r.get("/", ah(async (req, res) => {
   const { rows } = await q("SELECT * FROM users ORDER BY role, name");
   res.json(rows.filter((u) => allowed(req.user, u.role)).map((u) => ({ ...publicUser(u), lastLoginAt: u.last_login_at })));
 }));
+
+// ТП, найденные в 1С (по мобильному агенту в реализациях), — для выбора имени при создании ТП
+r.get("/agents-1c", ah(async (req, res) => res.json(await agentNames(req.user))));
 
 r.post("/", ah(async (req, res) => {
   const b = req.body || {};

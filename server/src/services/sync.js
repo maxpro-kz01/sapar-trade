@@ -4,6 +4,8 @@
 // (так ловим перепроведённые и удалённые документы; агент шлёт период с запасом 3 дня).
 import { tx, q } from "../db/pool.js";
 import { isIsoDate, HttpError } from "../lib/http.js";
+import { applyClientAgents } from "./client_agents.js";
+import { ensureArticleGroups } from "./money.js";
 
 const str = (v, max = 300) => (v === null || v === undefined ? null : String(v).trim().slice(0, max));
 const num = (v) => {
@@ -19,6 +21,13 @@ const date = (v) => {
   return d;
 };
 const key = (v) => { const s = str(v, 100); if (!s) throw new Error("пустой код"); return s; };
+const name = (v, max = 150) => (str(v, max) || "").replace(/\s+/g, " "); // «Эрматұлы Жұмабек » и двойные пробелы
+const dir = (v) => {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "приход" || s === "in") return "in";
+  if (s === "расход" || s === "out") return "out";
+  throw new Error(`не приход/расход: ${v}`);
+};
 
 // Описание сущностей: таблица, колонки, преобразование строки агента → значения колонок.
 // В запросах 1С слова GROUP/DAY заняты, поэтому принимаем и groupName/dt.
@@ -28,8 +37,18 @@ export const ENTITIES = {
     map: (r) => [key(r.code), str(r.name) || "(без названия)", str(r.group ?? r.groupName), str(r.unit, 50), str(r.sku, 100)] },
   warehouses: { table: "onec_warehouses", mode: "snapshot", pk: 1, cols: ["code", "name"],
     map: (r) => [key(r.code), str(r.name) || "(без названия)"] },
-  clients: { table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager", "phone", "address"],
-    map: (r) => [key(r.code), str(r.name) || "(без названия)", str(r.manager, 150), str(r.phone, 100), str(r.address, 500)] },
+  // manager из карточки 1С кладём в manager_1c; итоговый ТП (manager) считает applyClientAgents
+  clients: { table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager_1c", "phone", "address"],
+    map: (r) => [key(r.code), str(r.name) || "(без названия)", name(r.manager) || null, str(r.phone, 100), str(r.address, 500)],
+    after: applyClientAgents },
+  client_agents: { table: "onec_client_agents", optional: true, mode: "snapshot", pk: 3, cols: ["client_code", "agent", "source", "docs", "last_day"],
+    map: (r) => {
+      // в запросе 1С: 1 — мобильный агент в реализациях, 2 — имя основного договора
+      const src = r.source === "contract" || Number(r.source) === 2 ? "contract" : "agent";
+      return [key(r.client), name(r.agent), src, Math.round(num(r.docs)), r.lastDay ? date(r.lastDay) : null];
+    },
+    skip: (v) => !v[1], // пустой агент/договор — пропускаем
+    after: applyClientAgents },
   prices: { table: "onec_prices", mode: "snapshot", pk: 2, cols: ["product_code", "price_type", "price"],
     map: (r) => [key(r.product), str(r.priceType, 150) || "", num(r.price)] },
   stock: { table: "onec_stock", mode: "snapshot", pk: 2, sum: true, cols: ["warehouse_code", "product_code", "qty"],
@@ -40,6 +59,16 @@ export const ENTITIES = {
     map: (r) => [date(r.day ?? r.dt), key(r.product), str(r.client, 100) || "", num(r.qty), num(r.revenue)] },
   cost: { table: "onec_cost_daily", mode: "range", pk: 2, sum: true, cols: ["day", "product_code", "qty", "cost"],
     map: (r) => [date(r.day ?? r.dt), key(r.product), num(r.qty), num(r.cost)] },
+  // деньги (ТЗ финансов v1.2, часть B)
+  cash: { table: "onec_cash", optional: true, mode: "snapshot", pk: 1, sum: true, cols: ["account", "kind", "amount"],
+    map: (r) => [name(r.account, 200) || "(без названия)", str(r.kind, 50), num(r.amount)] },
+  cashflow: { table: "onec_cashflow_daily", optional: true, mode: "range", pk: 4, sum: true, cols: ["day", "account", "article", "dir", "amount"],
+    map: (r) => [date(r.day ?? r.dt), name(r.account, 200), name(r.article, 200), dir(r.dir), num(r.amount)],
+    after: ensureArticleGroups },
+  cf_articles: { table: "onec_cf_articles", optional: true, mode: "snapshot", pk: 1, cols: ["name", "kind", "activity"],
+    map: (r) => [name(r.name, 200), str(r.kind, 50), str(r.activity, 100)],
+    skip: (v) => !v[0],
+    after: ensureArticleGroups },
 };
 
 const MAX_ROWS = 200_000;
@@ -74,6 +103,7 @@ export function parseRows(entity, body) {
   rows.forEach((r, i) => {
     try {
       const v = spec.map(r || {});
+      if (spec.skip && spec.skip(v)) return;
       if (range && (v[0] < range.from || v[0] > range.to)) throw new Error(`дата ${v[0]} вне периода`);
       values.push(v);
     } catch (e) { if (errors.length < 20) errors.push(`строка ${i + 1}: ${e.message}`); }
@@ -97,12 +127,13 @@ export async function ingest(entity, body, agentHost) {
   try {
     const { spec, range, values } = parseRows(entity, body);
     // защита: пустой справочник — скорее ошибка запроса в 1С, а не пустая база
-    if (spec.mode === "snapshot" && values.length === 0 && !body.allowEmpty && !["debts", "stock"].includes(entity))
+    if (spec.mode === "snapshot" && values.length === 0 && !body.allowEmpty && !["debts", "stock", "client_agents", "cash"].includes(entity))
       throw new HttpError(400, "Пустой снимок справочника — не применяю (allowEmpty: true, если это правда)");
     await tx(async (c) => {
       if (spec.mode === "snapshot") await c.query(`TRUNCATE ${spec.table}`);
       else await c.query(`DELETE FROM ${spec.table} WHERE day BETWEEN $1 AND $2`, [range.from, range.to]);
       await insertBatches(c, spec, values);
+      if (spec.after) await spec.after(c);
     });
     await q("UPDATE sync_runs SET finished_at = now(), ok = true, rows_in = $2 WHERE id = $1", [run.id, values.length]);
     return { ok: true, entity, rows: values.length, range };
@@ -113,7 +144,8 @@ export async function ingest(entity, body, agentHost) {
   }
 }
 
-// Состояние по каждому типу данных: последняя успешная загрузка, последняя ошибка, «устарело»
+// Состояние по каждому типу данных: последняя успешная загрузка, последняя ошибка, «устарело».
+// optional — новые выгрузки: пока агент на сервере 1С не обновлён и ни разу их не прислал, «устаревшими» не считаются.
 export async function syncStatus(staleMinutes) {
   const { rows } = await q(`
     SELECT e.entity,
@@ -125,7 +157,7 @@ export async function syncStatus(staleMinutes) {
   const now = Date.now();
   const items = rows.map((r) => ({
     entity: r.entity, lastOk: r.last_ok, rows: r.rows, lastError: r.last_error,
-    stale: !r.last_ok || now - new Date(r.last_ok).getTime() > staleMinutes * 60_000,
+    stale: r.last_ok ? now - new Date(r.last_ok).getTime() > staleMinutes * 60_000 : !ENTITIES[r.entity].optional,
   }));
   const oks = items.filter((i) => i.lastOk).map((i) => new Date(i.lastOk).getTime());
   return { items, lastSync: oks.length ? new Date(Math.min(...oks)).toISOString() : null, stale: items.some((i) => i.stale) };

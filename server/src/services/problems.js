@@ -4,7 +4,7 @@ import { q } from "../db/pool.js";
 import { config } from "../config.js";
 import { can, scopeOf } from "./rbac.js";
 import { syncStatus } from "./sync.js";
-import { round2, clientFilter, priceType, today, shiftDay, overdueDate } from "./scope.js";
+import { round2, clientFilter, priceType, today, shiftDay, overdueDate, overdueSql } from "./scope.js";
 import { team } from "./team.js";
 import { lostDrivers } from "./fleet.js";
 
@@ -25,9 +25,9 @@ export async function problems(user) {
     const p = [overdueDate(), shiftDay(t, -30)];
     const f = clientFilter(user, "debts", "d", p);
     const { rows: [d] } = await q(
-      `SELECT coalesce(sum(amount) FILTER (WHERE amount > 0 AND doc_date < $1),0) AS overdue,
-              count(DISTINCT client_code) FILTER (WHERE amount > 0 AND doc_date < $1) AS clients,
-              coalesce(sum(amount) FILTER (WHERE amount > 0 AND doc_date < $2),0) AS old
+      `SELECT coalesce(sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}),0) AS overdue,
+              count(DISTINCT client_code) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}) AS clients,
+              coalesce(sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$2")}),0) AS old
        FROM onec_debts d WHERE true${f}`, p);
     if (Number(d.overdue) > 0) list.push({ lvl: Number(d.old) > 0 ? "red" : "yellow", code: "overdue",
       title: `Просроченная дебиторка: ${money(d.overdue)}`, detail: `${d.clients} клиентов, долг старше ${config.overdueDays} дней` + (Number(d.old) > 0 ? `; старше 30 дней — ${money(d.old)}` : ""), tab: "clients", filter: "debtors" });

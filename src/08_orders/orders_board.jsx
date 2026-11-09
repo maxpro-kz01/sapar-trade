@@ -29,7 +29,7 @@ function OrdersBoard({ session, authLost, showToast, defaultFilter = "new", titl
     } catch (e) { showToast(e.message); }
   };
   const retry = async (o) => {
-    try { await stApi("/api/orders/" + o.id + "/retry-1c", { method: "POST", token: session.token }); showToast("Отправим в 1С ещё раз"); r.reload(); }
+    try { await stApi("/api/orders/" + o.id + "/retry-1c", { method: "POST", token: session.token }); showToast("Агент создаст в 1С в течение 5 минут"); r.reload(); }
     catch (e) { showToast(e.message); }
   };
   return (
@@ -81,6 +81,7 @@ function OrdersBoard({ session, authLost, showToast, defaultFilter = "new", titl
                   <div className="flex gap-1.5 flex-wrap mt-2">
                     {actions.map(([st, label]) => <GhostButton key={st} small onClick={() => act(o, st)}>{label}</GhostButton>)}
                     {canManage && o.onec_status === "error" && <GhostButton small onClick={() => retry(o)}>Отправить в 1С ещё раз</GhostButton>}
+                    {canManage && o.onec_status === "skip" && o.status !== "Отменён" && <GhostButton small onClick={() => retry(o)}>Отправить в 1С</GhostButton>}
                   </div>
                 </div>
               )}

@@ -4995,7 +4995,11 @@ const LIVE_ENTITY_NAMES = {
   stock: "Остатки",
   debts: "Долги клиентов",
   sales: "Продажи",
-  cost: "Себестоимость"
+  cost: "Себестоимость",
+  client_agents: "ТП клиентов",
+  cash: "Остатки денег",
+  cashflow: "Движение денег",
+  cf_articles: "Статьи движения денег"
 };
 const LIVE_ROLES = {
   owner: "Владелец",
@@ -5165,14 +5169,22 @@ function LiveUsers({
   }, roles.map(([id, l]) => React.createElement("option", {
     key: id,
     value: id
-  }, l))), ["tp", "supervisor"].includes(form.role) && React.createElement(Field, {
-    label: "\u041C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u0432 1\u0421 (\u043A\u0430\u043A \u0432 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430; \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u2014 \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E)",
+  }, l))), ["tp", "supervisor"].includes(form.role) && React.createElement(React.Fragment, null, React.createElement(Field, {
+    label: "\u0422\u041F \u0432 1\u0421 (\u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043D\u0438\u0436\u0435; \u0441\u0443\u043F\u0435\u0440\u0432\u0430\u0439\u0437\u0435\u0440\u0443 \u2014 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0447\u0435\u0440\u0435\u0437 \u0437\u0430\u043F\u044F\u0442\u0443\u044E)",
     value: form.manager1c,
     onChange: e => setForm({
       ...form,
       manager1c: e.target.value
     })
-  }), React.createElement(Field, {
+  }), React.createElement(LiveAgentPicker, {
+    session: session,
+    value: form.manager1c,
+    multi: form.role === "supervisor",
+    onPick: v => setForm({
+      ...form,
+      manager1c: v
+    })
+  })), React.createElement(Field, {
     label: "\u041F\u0430\u0440\u043E\u043B\u044C (\u043D\u0435 \u043C\u0435\u043D\u044C\u0448\u0435 8 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432, \u0431\u0443\u043A\u0432\u044B \u0438 \u0446\u0438\u0444\u0440\u044B)",
     type: "password",
     value: form.password,
@@ -5191,6 +5203,44 @@ function LiveUsers({
     disabled: !form.login || !form.password,
     onClick: save
   }, "\u0421\u043E\u0437\u0434\u0430\u0442\u044C")));
+}
+function LiveAgentPicker({
+  session,
+  value,
+  multi,
+  onPick
+}) {
+  const r = useLive(session, "/api/users/agents-1c");
+  const chosen = String(value || "").split(",").map(s => s.trim()).filter(Boolean);
+  if (!r.data) return r.loading ? React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      marginBottom: 10
+    }
+  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0441\u043F\u0438\u0441\u043A\u0430 \u0422\u041F \u0438\u0437 1\u0421\u2026") : null;
+  if (!r.data.length) return React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      marginBottom: 10
+    }
+  }, "\u0421\u043F\u0438\u0441\u043E\u043A \u0422\u041F \u0438\u0437 1\u0421 \u043F\u043E\u043A\u0430 \u043F\u0443\u0441\u0442 \u2014 \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0430\u0433\u0435\u043D\u0442 \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435 1\u0421.");
+  const pick = name => {
+    if (!multi) return onPick(name);
+    onPick((chosen.includes(name) ? chosen.filter(x => x !== name) : [...chosen, name]).join(", "));
+  };
+  return React.createElement("div", {
+    className: "flex flex-wrap gap-1.5 mb-3",
+    style: {
+      maxHeight: 180,
+      overflowY: "auto"
+    }
+  }, r.data.map(a => React.createElement(LiveChip, {
+    key: a.name,
+    on: chosen.includes(a.name),
+    onClick: () => pick(a.name)
+  }, a.name, " \xB7 ", a.clients)));
 }
 function LivePasswordModal({
   session,
@@ -5283,7 +5333,7 @@ const MG_TABS = {
 function mgTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
   const role = session.user.role;
-  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross") && "finance", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
+  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross", "cash", "cash.in") && "finance", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
 }
 const MG_PERIOD_TABS = ["home", "sales", "team", "clients", "finance"];
 const MgCard = ({
@@ -6200,6 +6250,29 @@ function MgStock({
 function MgFinance({
   session,
   range,
+  authLost,
+  showToast
+}) {
+  const owner = liveCan(session, "gross");
+  const cash = liveCan(session, "cash", "cash.in");
+  return React.createElement(React.Fragment, null, owner && React.createElement(MgProfit, {
+    session: session,
+    range: range,
+    authLost: authLost
+  }), cash && React.createElement(MgMoney, {
+    session: session,
+    range: range,
+    authLost: authLost,
+    full: liveCan(session, "cash")
+  }), owner && React.createElement(MgCfArticles, {
+    session: session,
+    authLost: authLost,
+    showToast: showToast
+  }));
+}
+function MgProfit({
+  session,
+  range,
   authLost
 }) {
   const r = useLive(session, "/api/finance?" + stQs(range), authLost);
@@ -6223,23 +6296,118 @@ function MgFinance({
     cur: t.revenue,
     prev: p.revenue
   }), React.createElement(MgKpi, {
-    label: "\u0421\u0435\u0431\u0435\u0441\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C",
-    value: stMoney(t.cost),
-    cur: t.cost,
-    prev: p.cost,
-    invert: true
-  }), React.createElement(MgKpi, {
     label: "\u0412\u0430\u043B\u043E\u0432\u0430\u044F \u043F\u0440\u0438\u0431\u044B\u043B\u044C",
     value: stMoney(t.gross),
     cur: t.gross,
     prev: p.gross
   }), React.createElement(MgKpi, {
-    label: "\u041C\u0430\u0440\u0436\u0430",
-    value: t.marginPct === null ? "—" : fp(t.marginPct),
-    cur: t.marginPct || 0,
-    prev: p.marginPct ?? undefined,
-    noMoneyDelta: true
+    label: "\u0420\u0430\u0441\u0445\u043E\u0434\u044B",
+    value: stMoney(t.expenses),
+    cur: t.expenses,
+    prev: p.expenses,
+    invert: true
+  }), React.createElement(MgKpi, {
+    label: "\u0427\u0438\u0441\u0442\u0430\u044F \u043F\u0440\u0438\u0431\u044B\u043B\u044C",
+    value: stMoney(t.net),
+    cur: t.net,
+    prev: p.net,
+    accent: t.net < 0 ? "var(--red)" : "#9FD8B0"
   })), React.createElement("div", {
+    className: "kz-cols2"
+  }, React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041F\u0440\u0438\u0431\u044B\u043B\u044C \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434"), React.createElement(MgRow, {
+    l: "\u0412\u044B\u0440\u0443\u0447\u043A\u0430",
+    v: stMoney(t.revenue)
+  }), React.createElement(MgRow, {
+    l: "\u2212 \u0421\u0435\u0431\u0435\u0441\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C",
+    v: stMoney(t.cost)
+  }), React.createElement(MgRow, {
+    l: "= \u0412\u0430\u043B\u043E\u0432\u0430\u044F \u043F\u0440\u0438\u0431\u044B\u043B\u044C",
+    v: stMoney(t.gross),
+    strong: true
+  }), React.createElement(MgRow, {
+    l: "\u041C\u0430\u0440\u0436\u0430 \u0432\u0430\u043B\u043E\u0432\u0430\u044F",
+    v: t.marginPct === null ? "—" : fp(t.marginPct)
+  }), React.createElement(MgRow, {
+    l: "\u2212 \u041E\u043F\u0435\u0440\u0430\u0446\u0438\u043E\u043D\u043D\u044B\u0435 \u0440\u0430\u0441\u0445\u043E\u0434\u044B",
+    v: stMoney(t.expenses)
+  }), React.createElement(MgRow, {
+    l: "= \u0427\u0438\u0441\u0442\u0430\u044F \u043F\u0440\u0438\u0431\u044B\u043B\u044C",
+    v: stMoney(t.net),
+    strong: true,
+    color: t.net < 0 ? "var(--red)" : "#127A33"
+  }), React.createElement(MgRow, {
+    l: "\u0420\u0435\u043D\u0442\u0430\u0431\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C",
+    v: t.netPct === null ? "—" : fp(t.netPct)
+  }), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 8,
+      lineHeight: 1.45
+    }
+  }, "\u0420\u0430\u0441\u0445\u043E\u0434\u044B \u2014 \u0432\u044B\u043F\u043B\u0430\u0442\u044B \u043F\u043E \u0441\u0442\u0430\u0442\u044C\u044F\u043C \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F \u0434\u0435\u043D\u0435\u0433 \u0432 1\u0421 (\u043F\u043E \u0434\u043D\u044E \u043E\u043F\u043B\u0430\u0442\u044B). \u041E\u043F\u043B\u0430\u0442\u0430 \u043F\u043E\u0441\u0442\u0430\u0432\u0449\u0438\u043A\u0430\u043C, \u043F\u0435\u0440\u0435\u0432\u043E\u0434\u044B \u043C\u0435\u0436\u0434\u0443 \u0441\u0432\u043E\u0438\u043C\u0438 \u0441\u0447\u0435\u0442\u0430\u043C\u0438 \u0438 \u0437\u0430\u0439\u043C\u044B \u0432 \u0440\u0430\u0441\u0445\u043E\u0434\u044B \u043D\u0435 \u0432\u0445\u043E\u0434\u044F\u0442.")), React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0420\u0430\u0441\u0445\u043E\u0434\u044B \u043F\u043E \u0441\u0442\u0430\u0442\u044C\u044F\u043C"), d.expenses.slice(0, 12).map(x => React.createElement(MgRow, {
+    key: x.article,
+    l: x.article || "(без статьи)",
+    v: stMoney(x.amount)
+  })), !d.expenses.length && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    }
+  }, "\u0420\u0430\u0441\u0445\u043E\u0434\u043E\u0432 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 \u043D\u0435\u0442 (\u0438\u043B\u0438 \u0430\u0433\u0435\u043D\u0442 \u0435\u0449\u0451 \u043D\u0435 \u043F\u0440\u0438\u0441\u043B\u0430\u043B \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0435 \u0434\u0435\u043D\u0435\u0433)"))), React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041F\u043E \u043C\u0435\u0441\u044F\u0446\u0430\u043C"), React.createElement("div", {
+    className: "overflow-x-auto"
+  }, React.createElement("table", {
+    style: {
+      width: "100%",
+      fontSize: 12,
+      borderCollapse: "collapse",
+      minWidth: 420
+    }
+  }, React.createElement("thead", null, React.createElement("tr", {
+    style: {
+      color: "var(--muted)",
+      textAlign: "right"
+    }
+  }, React.createElement("th", {
+    style: {
+      textAlign: "left",
+      fontWeight: 600,
+      padding: "4px 0"
+    }
+  }, "\u041C\u0435\u0441\u044F\u0446"), React.createElement("th", {
+    style: {
+      fontWeight: 600
+    }
+  }, "\u0412\u044B\u0440\u0443\u0447\u043A\u0430"), React.createElement("th", {
+    style: {
+      fontWeight: 600
+    }
+  }, "\u0412\u0430\u043B\u043E\u0432\u0430\u044F"), React.createElement("th", {
+    style: {
+      fontWeight: 600
+    }
+  }, "\u0420\u0430\u0441\u0445\u043E\u0434\u044B"), React.createElement("th", {
+    style: {
+      fontWeight: 600
+    }
+  }, "\u0427\u0438\u0441\u0442\u0430\u044F"))), React.createElement("tbody", null, d.months.map(m => React.createElement("tr", {
+    key: m.month,
+    className: "font-mono-kz",
+    style: {
+      textAlign: "right",
+      borderTop: "1px dashed var(--line)"
+    }
+  }, React.createElement("td", {
+    style: {
+      textAlign: "left",
+      padding: "6px 0"
+    }
+  }, stFmtDay(m.month).slice(3), ".", m.month.slice(0, 4)), React.createElement("td", null, shortMoney(m.revenue)), React.createElement("td", null, shortMoney(m.gross)), React.createElement("td", null, shortMoney(m.expenses)), React.createElement("td", {
+    style: {
+      fontWeight: 800,
+      color: m.net < 0 ? "var(--red)" : "#127A33"
+    }
+  }, shortMoney(m.net)))))))), React.createElement("div", {
     className: "kz-cols2"
   }, d.daily.length > 1 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0412\u0430\u043B\u043E\u0432\u0430\u044F \u043F\u0440\u0438\u0431\u044B\u043B\u044C \u043F\u043E \u0434\u043D\u044F\u043C"), React.createElement(MgTrend, {
     data: d.daily.map(x => ({
@@ -6259,17 +6427,267 @@ function MgFinance({
       fontSize: 12,
       color: "var(--muted)"
     }
-  }, "\u041F\u0440\u043E\u0434\u0430\u0436 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 \u043D\u0435\u0442"))), React.createElement(MgCard, {
+  }, "\u041F\u0440\u043E\u0434\u0430\u0436 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 \u043D\u0435\u0442"))));
+}
+const MONEY_GROUP_COLORS = {
+  customer: "#127A33",
+  income_other: "#0B5A8A",
+  supplier: "#8A5A00",
+  transfer: "#77748C",
+  loan: "#5B3FA8",
+  expense: "#B3261E",
+  none: "#77748C"
+};
+function MgMoney({
+  session,
+  range,
+  authLost,
+  full
+}) {
+  const r = useLive(session, "/api/money?" + stQs(range), authLost);
+  const d = r.data;
+  if (!d) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  const rec = d.received;
+  return React.createElement(React.Fragment, null, React.createElement(MgLabel, null, "\u0414\u0435\u043D\u044C\u0433\u0438"), React.createElement("div", {
+    className: "grid gap-2 mb-3",
     style: {
-      background: "#FFF6DE",
-      borderColor: "#F5D68A"
+      gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))"
     }
-  }, React.createElement("p", {
+  }, React.createElement(MgKpi, {
+    label: "\u041F\u043E\u0441\u0442\u0443\u043F\u0438\u043B\u043E \u043E\u0442 \u043F\u043E\u043A\u0443\u043F\u0430\u0442\u0435\u043B\u0435\u0439",
+    value: stMoney(rec.total),
+    cur: rec.total,
+    prev: rec.prev
+  }), full && React.createElement(MgKpi, {
+    label: "\u0412\u0441\u0435\u0433\u043E \u043F\u043E\u0441\u0442\u0443\u043F\u0438\u043B\u043E",
+    value: stMoney(d.flow.in)
+  }), full && React.createElement(MgKpi, {
+    label: "\u0412\u0441\u0435\u0433\u043E \u0432\u044B\u043F\u043B\u0430\u0447\u0435\u043D\u043E",
+    value: stMoney(d.flow.out)
+  }), full && React.createElement(MgKpi, {
+    label: "\u0414\u0435\u043D\u044C\u0433\u0438 \u0441\u0435\u0439\u0447\u0430\u0441",
+    value: stMoney(d.balances.total),
+    accent: d.balances.total < 0 ? "var(--red)" : undefined
+  })), !full && rec.daily.length > 1 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u044F \u043F\u043E \u0434\u043D\u044F\u043C"), React.createElement(MgTrend, {
+    data: rec.daily.map(x => ({
+      v: x.amount,
+      label: stFmtDay(x.day)
+    })),
+    color: "#127A33"
+  })), full && React.createElement("div", {
+    className: "kz-cols2"
+  }, React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041E\u0441\u0442\u0430\u0442\u043A\u0438 \u0441\u0435\u0439\u0447\u0430\u0441"), d.balances.accounts.map(a => React.createElement(MgRow, {
+    key: a.account,
+    l: a.account + (a.kind ? " · " + a.kind.toLowerCase() : ""),
+    v: stMoney(a.amount),
+    color: a.amount < 0 ? "var(--red)" : undefined
+  })), React.createElement(MgRow, {
+    l: "\u0418\u0442\u043E\u0433\u043E",
+    v: stMoney(d.balances.total),
+    strong: true
+  }), !d.balances.accounts.length && React.createElement("p", {
     style: {
       fontSize: 12,
-      color: "#8A5A00"
+      color: "var(--muted)"
     }
-  }, d.notYet)));
+  }, "\u041E\u0441\u0442\u0430\u0442\u043A\u0438 \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B \u2014 \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0430\u0433\u0435\u043D\u0442 \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435 1\u0421"), d.balances.negative > 0 && React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "#B3261E",
+      marginTop: 8,
+      lineHeight: 1.45
+    }
+  }, "\u041C\u0438\u043D\u0443\u0441 \u0432 \u043A\u0430\u0441\u0441\u0435 \u0438\u043B\u0438 \u043D\u0430 \u0441\u0447\u0451\u0442\u0435 \u2014 \u0442\u0430\u043A \u0441\u0435\u0439\u0447\u0430\u0441 \u0432 1\u0421. \u041E\u0431\u044B\u0447\u043D\u043E \u044D\u0442\u043E \u0437\u043D\u0430\u0447\u0438\u0442, \u0447\u0442\u043E \u0447\u0430\u0441\u0442\u044C \u043F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0439 \u0438\u043B\u0438 \u0432\u044B\u043F\u043B\u0430\u0442 \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0434\u0435\u043D\u0430. \u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0441 \u0431\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u043E\u043C.")), React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u0414\u0432\u0438\u0436\u0435\u043D\u0438\u0435 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434"), d.flow.byGroup.map(g => React.createElement("div", {
+    key: g.grp,
+    className: "flex items-center gap-2 py-1.5",
+    style: {
+      borderBottom: "1px dashed var(--line)"
+    }
+  }, React.createElement("span", {
+    className: "rounded-full shrink-0",
+    style: {
+      width: 8,
+      height: 8,
+      background: MONEY_GROUP_COLORS[g.grp]
+    }
+  }), React.createElement("span", {
+    className: "flex-1 min-w-0",
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)"
+    }
+  }, g.label), React.createElement("span", {
+    className: "font-mono-kz text-right",
+    style: {
+      fontSize: 12,
+      fontWeight: 700
+    }
+  }, g.in ? React.createElement("span", {
+    style: {
+      color: "#127A33"
+    }
+  }, "+", shortMoney(g.in)) : null, g.in && g.out ? " / " : "", g.out ? React.createElement("span", {
+    style: {
+      color: "#B3261E"
+    }
+  }, "\u2212", shortMoney(g.out)) : null))), !d.flow.byGroup.length && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    }
+  }, "\u0414\u0432\u0438\u0436\u0435\u043D\u0438\u044F \u0434\u0435\u043D\u0435\u0433 \u0437\u0430 \u043F\u0435\u0440\u0438\u043E\u0434 \u043D\u0435\u0442"), d.flow.transfers > 0 && React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 8
+    }
+  }, "\u041F\u0435\u0440\u0435\u0432\u043E\u0434\u044B \u043C\u0435\u0436\u0434\u0443 \u0441\u0432\u043E\u0438\u043C\u0438 \u0441\u0447\u0435\u0442\u0430\u043C\u0438 (", shortMoney(d.flow.transfers), ") \u0432 \xAB\u0412\u0441\u0435\u0433\u043E \u043F\u043E\u0441\u0442\u0443\u043F\u0438\u043B\u043E/\u0432\u044B\u043F\u043B\u0430\u0447\u0435\u043D\u043E\xBB \u043D\u0435 \u0432\u0445\u043E\u0434\u044F\u0442."))), full && d.flow.daily.length > 1 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u044F \u043F\u043E \u0434\u043D\u044F\u043C"), React.createElement(MgTrend, {
+    data: d.flow.daily.map(x => ({
+      v: x.in,
+      label: stFmtDay(x.day)
+    })),
+    color: "#127A33"
+  }), React.createElement(MgLabel, null, "\u0412\u044B\u043F\u043B\u0430\u0442\u044B \u043F\u043E \u0434\u043D\u044F\u043C"), React.createElement(MgTrend, {
+    data: d.flow.daily.map(x => ({
+      v: x.out,
+      label: stFmtDay(x.day)
+    })),
+    color: "#B3261E"
+  })), full && d.flow.byArticle.length > 0 && React.createElement(MgCard, null, React.createElement(MgLabel, null, "\u041F\u043E \u0441\u0442\u0430\u0442\u044C\u044F\u043C"), d.flow.byArticle.slice(0, 20).map(a => React.createElement(LiveItem, {
+    key: a.article + a.grp,
+    title: a.article,
+    sub: MONEY_GROUP_LABEL(a.grp),
+    value: a.out ? "−" + stMoney(a.out) : "+" + stMoney(a.in),
+    valueColor: a.out ? "#B3261E" : "#127A33",
+    valueSub: a.in && a.out ? "+" + shortMoney(a.in) : undefined
+  }))));
+}
+const MONEY_GROUP_LABEL = g => ({
+  customer: "от покупателей",
+  income_other: "прочие поступления",
+  supplier: "поставщикам",
+  transfer: "перевод между счетами",
+  loan: "займы",
+  expense: "расход",
+  none: "без статьи"
+})[g] || g;
+function MgCfArticles({
+  session,
+  authLost,
+  showToast
+}) {
+  const [open, setOpen] = useState(false);
+  return React.createElement(MgCard, null, React.createElement("button", {
+    onClick: () => setOpen(!open),
+    className: "w-full flex items-center justify-between",
+    style: {
+      gap: 8
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, "\u0421\u0442\u0430\u0442\u044C\u0438 \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u044F \u0434\u0435\u043D\u0435\u0433"), React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--navy)",
+      fontWeight: 700
+    }
+  }, open ? "Скрыть" : "Настроить")), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      marginTop: 4
+    }
+  }, "\u041A\u0430\u043A\u0438\u0435 \u0441\u0442\u0430\u0442\u044C\u0438 \u0438\u0437 1\u0421 \u0441\u0447\u0438\u0442\u0430\u044E\u0442\u0441\u044F \u0440\u0430\u0441\u0445\u043E\u0434\u0430\u043C\u0438, \u0430 \u043A\u0430\u043A\u0438\u0435 \u2014 \u043F\u0435\u0440\u0435\u0432\u043E\u0434\u0430\u043C\u0438, \u043E\u043F\u043B\u0430\u0442\u043E\u0439 \u043F\u043E\u0441\u0442\u0430\u0432\u0449\u0438\u043A\u0430\u043C \u0438\u043B\u0438 \u0437\u0430\u0439\u043C\u0430\u043C\u0438."), open && React.createElement(MgCfArticleList, {
+    session: session,
+    authLost: authLost,
+    showToast: showToast
+  }));
+}
+function MgCfArticleList({
+  session,
+  authLost,
+  showToast
+}) {
+  const r = useLive(session, "/api/cf-articles", authLost);
+  const [busy, setBusy] = useState(null);
+  if (!r.data) return React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  }));
+  const {
+    groups,
+    items
+  } = r.data;
+  const save = async (article, grp) => {
+    setBusy(article);
+    try {
+      await stApi("/api/cf-articles", {
+        method: "PUT",
+        token: session.token,
+        body: {
+          article,
+          grp
+        }
+      });
+      showToast("Сохранено");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  if (!items.length) return React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginTop: 8
+    }
+  }, "\u0421\u0442\u0430\u0442\u044C\u0438 \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B \u0438\u0437 1\u0421 \u2014 \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u0435 \u0430\u0433\u0435\u043D\u0442 \u043D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435 1\u0421.");
+  return React.createElement("div", {
+    className: "mt-2"
+  }, items.map(a => React.createElement("div", {
+    key: a.article,
+    className: "py-2",
+    style: {
+      borderBottom: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex items-center gap-2 flex-wrap"
+  }, React.createElement("p", {
+    className: "flex-1 min-w-0",
+    style: {
+      fontSize: 12.5,
+      fontWeight: 700
+    }
+  }, a.article || "(без статьи)", " ", a.isNew && React.createElement(Badge, {
+    bg: "#FFF6DE",
+    fg: "#8A5A00"
+  }, "\u043D\u043E\u0432\u0430\u044F")), React.createElement("select", {
+    value: a.grp,
+    disabled: busy === a.article,
+    onChange: e => save(a.article, e.target.value),
+    className: "rounded-lg px-2 py-1.5",
+    style: {
+      border: "1.5px solid " + (a.manual ? "var(--navy)" : "var(--line)"),
+      fontSize: 12,
+      background: "#fff",
+      maxWidth: "100%"
+    }
+  }, Object.entries(groups).map(([id, label]) => React.createElement("option", {
+    key: id,
+    value: id
+  }, label)))), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)"
+    }
+  }, "30 \u0434\u043D\u0435\u0439: ", a.in30 ? "+" + shortMoney(a.in30) : "", a.in30 && a.out30 ? " / " : "", a.out30 ? "−" + shortMoney(a.out30) : "", !a.in30 && !a.out30 ? "движения нет" : "", a.manual ? " · выбрано вручную" : ""))));
 }
 function MgProblems({
   session,
@@ -7178,7 +7596,11 @@ const MG_AUDIT_ACTIONS = {
   export: "Выгрузка",
   "plans.save": "План продаж",
   "task.create": "Новая задача",
-  "task.update": "Изменена задача"
+  "task.update": "Изменена задача",
+  "cf_article.group": "Группа статьи денег",
+  "trip.start": "Начат рейс",
+  "trip.end": "Завершён рейс",
+  "settings.save": "Настройки"
 };
 function MgAudit({
   session,
@@ -7444,7 +7866,7 @@ function OrdersBoard({
         method: "POST",
         token: session.token
       });
-      showToast("Отправим в 1С ещё раз");
+      showToast("Агент создаст в 1С в течение 5 минут");
       r.reload();
     } catch (e) {
       showToast(e.message);
@@ -7559,7 +7981,10 @@ function OrdersBoard({
     }, label)), canManage && o.onec_status === "error" && React.createElement(GhostButton, {
       small: true,
       onClick: () => retry(o)
-    }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0432 1\u0421 \u0435\u0449\u0451 \u0440\u0430\u0437"))));
+    }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0432 1\u0421 \u0435\u0449\u0451 \u0440\u0430\u0437"), canManage && o.onec_status === "skip" && o.status !== "Отменён" && React.createElement(GhostButton, {
+      small: true,
+      onClick: () => retry(o)
+    }, "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0432 1\u0421"))));
   })));
 }
 const shiftHM = ts => new Date(ts).toLocaleTimeString("ru-RU", {
@@ -7779,7 +8204,24 @@ function AdminSettingsLive({
       showToast(e.message);
     }
   };
-  return React.createElement(MgCard, null, React.createElement(Field, {
+  const toggle1c = async () => {
+    const on = !r.data.onecOrders;
+    if (on && !window.confirm("Включить отправку заказов в 1С? Новые заказы ТП будут создаваться в 1С как непроведённые «Реализации».")) return;
+    try {
+      await stApi("/api/settings", {
+        method: "PUT",
+        token: session.token,
+        body: {
+          onecOrders: on
+        }
+      });
+      showToast(on ? "Отправка в 1С включена" : "Отправка в 1С выключена");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  return React.createElement(React.Fragment, null, React.createElement(MgCard, null, React.createElement(Field, {
     label: "WhatsApp \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440\u0430 (\u0434\u043B\u044F \u043E\u0442\u0447\u0451\u0442\u0430 \u0441\u043C\u0435\u043D\u044B)",
     value: phone,
     inputMode: "tel",
@@ -7788,7 +8230,45 @@ function AdminSettingsLive({
     full: true,
     disabled: !liveCan(session, "settings"),
     onClick: save
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"));
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")), React.createElement(MgCard, null, React.createElement("div", {
+    className: "flex items-center gap-3"
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u044F\u0442\u044C \u0437\u0430\u043A\u0430\u0437\u044B \u0432 1\u0421"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      lineHeight: 1.45
+    }
+  }, "\u0417\u0430\u043A\u0430\u0437 \u0422\u041F \u0441\u043E\u0437\u0434\u0430\u0451\u0442\u0441\u044F \u0432 1\u0421 \u043A\u0430\u043A \xAB\u0420\u0435\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u044F \u0442\u043E\u0432\u0430\u0440\u043E\u0432 \u0438 \u0443\u0441\u043B\u0443\u0433\xBB ", React.createElement("b", null, "\u0431\u0435\u0437 \u043F\u0440\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u044F"), " \u2014 \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440 \u043F\u0440\u043E\u0432\u0435\u0440\u044F\u0435\u0442 \u0438 \u043F\u0440\u043E\u0432\u043E\u0434\u0438\u0442. \u0417\u0430\u043A\u0430\u0437\u044B, \u0441\u0434\u0435\u043B\u0430\u043D\u043D\u044B\u0435 \u043F\u0440\u0438 \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u043D\u043E\u0439 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0435, \u043C\u043E\u0436\u043D\u043E \u043E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u043A\u043D\u043E\u043F\u043A\u043E\u0439 \u0432 \u0437\u0430\u043A\u0430\u0437\u0435.")), React.createElement("button", {
+    onClick: toggle1c,
+    disabled: !liveCan(session, "settings"),
+    "aria-pressed": !!r.data.onecOrders,
+    title: "\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u044F\u0442\u044C \u0437\u0430\u043A\u0430\u0437\u044B \u0432 1\u0421",
+    className: "rounded-full shrink-0",
+    style: {
+      width: 48,
+      height: 28,
+      background: r.data.onecOrders ? "#1FA854" : "#C9C7D6",
+      position: "relative"
+    }
+  }, React.createElement("span", {
+    className: "rounded-full",
+    style: {
+      position: "absolute",
+      top: 3,
+      left: r.data.onecOrders ? 23 : 3,
+      width: 22,
+      height: 22,
+      background: "#fff",
+      transition: "left .15s"
+    }
+  })))));
 }
 const ADMIN_TABS = {
   shift: ["power", "Смена"],
