@@ -1,6 +1,5 @@
-// Проверка плашки «Вышла новая версия сайта»: страница собрана с версией aaaaaaaaaaaa (RENDER_GIT_COMMIT),
-// при проверке сервер отдаёт страницу с другой версией — должна появиться плашка, кнопка перезагружает страницу.
-// Запуск: RENDER_GIT_COMMIT=aaaaaaaaaaaa1111 ST_API_URL=http://127.0.0.1:3999 node build.mjs && node tools/version-shots.mjs
+// Проверка плашки «Вышла новая версия сайта»: при проверке сервер отдаёт страницу с другой версией (st-build) —
+// должна появиться плашка, кнопка перезагружает страницу. Запуск: node build.mjs && node tools/version-shots.mjs
 import { chromium } from "playwright-core";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -10,6 +9,7 @@ import { chromePath } from "./chrome-path.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(join(root, "public/index.html"), "utf8");
+const ver = (html.match(/<meta name="st-build" content="([0-9a-f]{12})"/) || [])[1];
 let served = html; // что отдаёт «сервер» сейчас
 const site = createServer((req, res) => { res.setHeader("content-type", "text/html; charset=utf-8"); res.end(served); });
 await new Promise((ok) => site.listen(8080, "127.0.0.1", ok));
@@ -30,10 +30,10 @@ const check = (ok, msg) => { console.log((ok ? "✓ " : "✗ ") + msg); if (!ok)
 const visible = () => page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
 
 await page.goto("http://127.0.0.1:8080/");
-check(html.includes('content="aaaaaaaaaaaa"'), "страница собрана с версией");
+check(!!ver, "страница собрана с версией " + ver);
 await visible(); await page.waitForTimeout(800);
 check(await page.getByTestId("new-version").count() === 0, "та же версия — плашки нет");
-served = html.replace('content="aaaaaaaaaaaa"', 'content="bbbbbbbbbbbb"'); // вышла новая версия
+served = html.replace(`content="${ver}"`, 'content="bbbbbbbbbbbb"'); // вышла новая версия
 await visible(); await page.waitForTimeout(800);
 check(await page.getByTestId("new-version").count() === 1, "новая версия — плашка «Вышла новая версия сайта»");
 await page.screenshot({ path: "/tmp/version-bar.png" });
