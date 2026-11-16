@@ -1,17 +1,30 @@
 ﻿<#
 .SYNOPSIS
   Создаёт задание Планировщика Windows «Sapar Trade — синхронизация 1С»: запуск агента каждые 5 минут.
-  Запускать от администратора. Задание выполняется от имени указанного пользователя Windows
-  (того же, под которым выполнено -SetSecrets), даже когда никто не вошёл в систему.
+  Если запущен без прав администратора — сам перезапускается от администратора в окне, которое не закрывается.
+  Задание выполняется от имени пользователя Windows, который запустил скрипт (того же, под которым сохранён
+  пароль 1С — 1_save-password.bat), даже когда никто не вошёл в систему. Спрашивается только пароль Windows.
 .EXAMPLE
+  .\install-task.ps1
   .\install-task.ps1 -User "SRV1C\sapar_agent"
 #>
 param(
-  [Parameter(Mandatory)] [string]$User,
+  [string]$User = "$env:USERDOMAIN\$env:USERNAME",
   [int]$EveryMinutes = 5,
   [string]$TaskName = 'Sapar Trade — синхронизация 1С'
 )
 $ErrorActionPreference = 'Stop'
+
+# Нет прав администратора — перезапуск от администратора. Пользователь берётся ДО перезапуска,
+# иначе задание создастся от имени администратора, и агент не сможет прочитать сохранённый пароль 1С.
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  Write-Host 'Нужны права администратора — подтвердите в появившемся окне Windows.' -ForegroundColor Yellow
+  Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+    '-NoProfile', '-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-User', "`"$User`"")
+  return
+}
+Write-Host "Пользователь Windows: $User — введите его пароль (пароль входа в Windows, не 1С)." -ForegroundColor Cyan
 $script = Join-Path $PSScriptRoot 'sapar-1c-agent.ps1'
 if (-not (Test-Path $script)) { throw "Не найден $script" }
 

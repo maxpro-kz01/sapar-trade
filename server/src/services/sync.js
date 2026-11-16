@@ -33,15 +33,15 @@ const dir = (v) => {
 // В запросах 1С слова GROUP/DAY заняты, поэтому принимаем и groupName/dt.
 // pk — сколько первых колонок образуют ключ; sum — при повторе ключа складывать числа.
 export const ENTITIES = {
-  products: { table: "onec_products", mode: "snapshot", pk: 1, cols: ["code", "name", "group_name", "unit", "sku"],
+  products: { every: 60, table: "onec_products", mode: "snapshot", pk: 1, cols: ["code", "name", "group_name", "unit", "sku"],
     map: (r) => [key(r.code), str(r.name) || "(без названия)", str(r.group ?? r.groupName), str(r.unit, 50), str(r.sku, 100)] },
-  warehouses: { table: "onec_warehouses", mode: "snapshot", pk: 1, cols: ["code", "name"],
+  warehouses: { every: 1440, table: "onec_warehouses", mode: "snapshot", pk: 1, cols: ["code", "name"],
     map: (r) => [key(r.code), str(r.name) || "(без названия)"] },
   // manager из карточки 1С кладём в manager_1c; итоговый ТП (manager) считает applyClientAgents
-  clients: { table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager_1c", "phone", "address"],
+  clients: { every: 60, table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager_1c", "phone", "address"],
     map: (r) => [key(r.code), str(r.name) || "(без названия)", name(r.manager) || null, str(r.phone, 100), str(r.address, 500)],
     after: applyClientAgents },
-  client_agents: { table: "onec_client_agents", optional: true, mode: "snapshot", pk: 3, cols: ["client_code", "agent", "source", "docs", "last_day"],
+  client_agents: { every: 60, table: "onec_client_agents", optional: true, mode: "snapshot", pk: 3, cols: ["client_code", "agent", "source", "docs", "last_day"],
     map: (r) => {
       // в запросе 1С: 1 — мобильный агент в реализациях, 2 — имя основного договора
       const src = r.source === "contract" || Number(r.source) === 2 ? "contract" : "agent";
@@ -49,23 +49,23 @@ export const ENTITIES = {
     },
     skip: (v) => !v[1], // пустой агент/договор — пропускаем
     after: applyClientAgents },
-  prices: { table: "onec_prices", mode: "snapshot", pk: 2, cols: ["product_code", "price_type", "price"],
+  prices: { every: 5, table: "onec_prices", mode: "snapshot", pk: 2, cols: ["product_code", "price_type", "price"],
     map: (r) => [key(r.product), str(r.priceType, 150) || "", num(r.price)] },
-  stock: { table: "onec_stock", mode: "snapshot", pk: 2, sum: true, cols: ["warehouse_code", "product_code", "qty"],
+  stock: { every: 5, table: "onec_stock", mode: "snapshot", pk: 2, sum: true, cols: ["warehouse_code", "product_code", "qty"],
     map: (r) => [key(r.warehouse), key(r.product), num(r.qty)] },
-  debts: { table: "onec_debts", mode: "snapshot", pk: 0, cols: ["client_code", "doc_date", "doc_name", "amount"],
+  debts: { every: 5, table: "onec_debts", mode: "snapshot", pk: 0, cols: ["client_code", "doc_date", "doc_name", "amount"],
     map: (r) => [key(r.client), r.docDate ? date(r.docDate) : null, str(r.docName, 300), num(r.amount)] },
-  sales: { table: "onec_sales_daily", mode: "range", pk: 3, sum: true, cols: ["day", "product_code", "client_code", "qty", "revenue"],
+  sales: { every: 5, table: "onec_sales_daily", mode: "range", pk: 3, sum: true, cols: ["day", "product_code", "client_code", "qty", "revenue"],
     map: (r) => [date(r.day ?? r.dt), key(r.product), str(r.client, 100) || "", num(r.qty), num(r.revenue)] },
-  cost: { table: "onec_cost_daily", mode: "range", pk: 2, sum: true, cols: ["day", "product_code", "qty", "cost"],
+  cost: { every: 5, table: "onec_cost_daily", mode: "range", pk: 2, sum: true, cols: ["day", "product_code", "qty", "cost"],
     map: (r) => [date(r.day ?? r.dt), key(r.product), num(r.qty), num(r.cost)] },
   // деньги (ТЗ финансов v1.2, часть B)
-  cash: { table: "onec_cash", optional: true, mode: "snapshot", pk: 1, sum: true, cols: ["account", "kind", "amount"],
+  cash: { every: 5, table: "onec_cash", optional: true, mode: "snapshot", pk: 1, sum: true, cols: ["account", "kind", "amount"],
     map: (r) => [name(r.account, 200) || "(без названия)", str(r.kind, 50), num(r.amount)] },
-  cashflow: { table: "onec_cashflow_daily", optional: true, mode: "range", pk: 4, sum: true, cols: ["day", "account", "article", "dir", "amount"],
+  cashflow: { every: 5, table: "onec_cashflow_daily", optional: true, mode: "range", pk: 4, sum: true, cols: ["day", "account", "article", "dir", "amount"],
     map: (r) => [date(r.day ?? r.dt), name(r.account, 200), name(r.article, 200), dir(r.dir), num(r.amount)],
     after: ensureArticleGroups },
-  cf_articles: { table: "onec_cf_articles", optional: true, mode: "snapshot", pk: 1, cols: ["name", "kind", "activity"],
+  cf_articles: { every: 1440, table: "onec_cf_articles", optional: true, mode: "snapshot", pk: 1, cols: ["name", "kind", "activity"],
     map: (r) => [name(r.name, 200), str(r.kind, 50), str(r.activity, 100)],
     skip: (v) => !v[0],
     after: ensureArticleGroups },
@@ -144,6 +144,10 @@ export async function ingest(entity, body, agentHost) {
   }
 }
 
+// Через сколько минут без загрузки вид данных считается устаревшим: не меньше общего порога (15 мин)
+// и с запасом на один пропущенный запуск агента: товары раз в час — устарели через 2 ч 10 мин, склады раз в сутки — через 48 ч.
+export const staleAfter = (entity, staleMinutes) => Math.max(staleMinutes, 2 * (ENTITIES[entity]?.every || 0) + 10);
+
 // Состояние по каждому типу данных: последняя успешная загрузка, последняя ошибка, «устарело».
 // optional — новые выгрузки: пока агент на сервере 1С не обновлён и ни разу их не прислал, «устаревшими» не считаются.
 export async function syncStatus(staleMinutes) {
@@ -157,8 +161,11 @@ export async function syncStatus(staleMinutes) {
   const now = Date.now();
   const items = rows.map((r) => ({
     entity: r.entity, lastOk: r.last_ok, rows: r.rows, lastError: r.last_error,
-    stale: r.last_ok ? now - new Date(r.last_ok).getTime() > staleMinutes * 60_000 : !ENTITIES[r.entity].optional,
+    every: ENTITIES[r.entity].every,
+    stale: r.last_ok ? now - new Date(r.last_ok).getTime() > staleAfter(r.entity, staleMinutes) * 60_000 : !ENTITIES[r.entity].optional,
   }));
-  const oks = items.filter((i) => i.lastOk).map((i) => new Date(i.lastOk).getTime());
+  // «Обновлено» — по частым выгрузкам (каждые 5 мин); суточные справочники время не «старят»
+  const frequent = items.filter((i) => i.lastOk && i.every <= staleMinutes);
+  const oks = (frequent.length ? frequent : items.filter((i) => i.lastOk)).map((i) => new Date(i.lastOk).getTime());
   return { items, lastSync: oks.length ? new Date(Math.min(...oks)).toISOString() : null, stale: items.some((i) => i.stale) };
 }

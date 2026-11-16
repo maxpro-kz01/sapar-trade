@@ -4,6 +4,7 @@
 // styles/*.css            — стили (base.css, затем responsive.css)
 // src/index.template.html — HTML-шаблон с метками /*__STYLES__*/ и /*__APP__*/
 // ST_API_URL             — адрес API (по умолчанию https://sapar-trade-api.onrender.com)
+// RENDER_GIT_COMMIT      — версия сборки (на Render задаётся сама); сайт по ней видит, что вышла новая версия
 // Результат: public/index.html (JSX скомпилирован заранее, Babel в браузере не нужен).
 //
 // Запуск: npm ci && node build.mjs
@@ -41,8 +42,12 @@ const styles = ["styles/base.css", "styles/responsive.css"]
 // Адрес API-сервера рабочего режима (можно переопределить: ST_API_URL=http://127.0.0.1:3999 node build.mjs)
 const apiUrl = process.env.ST_API_URL || "https://sapar-trade-api.onrender.com";
 
+// Версия сборки: на Render — коммит GitHub; локально — "dev" (проверка новой версии на сайте выключена)
+const build = (process.env.RENDER_GIT_COMMIT || "dev").slice(0, 12);
+
 const html = read("src/index.template.html")
   .replace("__ST_API__", () => apiUrl)
+  .replace("__ST_BUILD__", () => build)
   .replace("/*__STYLES__*/", () => styles)
   .replace("/*__APP__*/", () => code.replace(/<\/script/gi, "<\\/script"));
 

@@ -69,6 +69,7 @@ function App() {
           return <App2 session={liveSession} setSession={setLiveSession} onExit={exit} />;
         })()}
       </div>
+      <NewVersionBar />
     </div>
     </LangCtx.Provider>
   );

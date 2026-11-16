@@ -19,7 +19,7 @@ function LiveSync({ session, authLost }) {
         </div>
         {d.items.map((x) => (
           <LiveItem key={x.entity} title={LIVE_ENTITY_NAMES[x.entity] || x.entity}
-            sub={x.lastError && (!x.lastOk || new Date(x.lastError.at) > new Date(x.lastOk)) ? "Ошибка: " + x.lastError.error : null}
+            sub={x.lastError && (!x.lastOk || new Date(x.lastError.at) > new Date(x.lastOk)) ? "Ошибка: " + x.lastError.error : liveEvery(x.every)}
             value={x.lastOk ? stFmtTime(x.lastOk) : "не загружалось"} valueColor={x.stale ? "var(--red)" : "#127A33"}
             valueSub={x.rows !== null && x.rows !== undefined ? stNum(x.rows) + " строк" : null} />
         ))}
@@ -97,6 +97,9 @@ function LiveUsers({ session, authLost, showToast }) {
 }
 
 // Имена ТП, найденные в 1С (мобильный агент в реализациях), — чтобы не набирать вручную и не ошибиться
+// Как часто агент 1С присылает этот вид данных (по расписанию)
+const liveEvery = (m) => (!m ? null : m >= 1440 ? "обновляется раз в сутки" : m >= 60 ? "обновляется раз в час" : "обновляется каждые " + m + " мин");
+
 function LiveAgentPicker({ session, value, multi, onPick }) {
   const r = useLive(session, "/api/users/agents-1c");
   const chosen = String(value || "").split(",").map((s) => s.trim()).filter(Boolean);

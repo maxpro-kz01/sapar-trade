@@ -175,6 +175,26 @@ test("бухгалтер: продажи и долги без маржи, ста
   assert.equal(s.body.stale, false);
 });
 
+test("«устарело» учитывает интервал каждой выгрузки", async () => {
+  // склады обновляются раз в сутки: 3 часа — нормально; остатки каждые 5 мин: 20 минут — устарели
+  await env.pool.query("UPDATE sync_runs SET finished_at = now() - interval '3 hours' WHERE entity IN ('warehouses', 'products')");
+  let s = await api("GET", "/api/sync/status", { token: ownerToken });
+  const it = (e) => s.body.items.find((x) => x.entity === e);
+  assert.equal(it("warehouses").stale, false, "склады — раз в сутки");
+  assert.equal(it("warehouses").every, 1440);
+  assert.equal(it("products").stale, true, "товары — раз в час, 3 часа — устарели");
+  await env.pool.query("UPDATE sync_runs SET finished_at = now() - interval '1 hour' WHERE entity = 'products'");
+  s = await api("GET", "/api/sync/status", { token: ownerToken });
+  assert.equal(it("products").stale, false, "товары час назад — нормально");
+  assert.equal(s.body.stale, false);
+  assert.ok(Date.now() - new Date(s.body.lastSync).getTime() < 10 * 60_000, "«обновлено» — по частым выгрузкам");
+  await env.pool.query("UPDATE sync_runs SET finished_at = now() - interval '20 minutes' WHERE entity = 'stock'");
+  s = await api("GET", "/api/sync/status", { token: ownerToken });
+  assert.equal(it("stock").stale, true);
+  assert.equal(s.body.stale, true);
+  await env.pool.query("UPDATE sync_runs SET finished_at = now()"); // вернуть как было для следующих тестов
+});
+
 test("склад: поиск и фильтр по складу", async () => {
   const r = await api("GET", "/api/stock?q=" + encodeURIComponent("масло"), { token: ownerToken });
   assert.equal(r.body.items.length, 1);
