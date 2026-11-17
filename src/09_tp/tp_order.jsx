@@ -1,10 +1,9 @@
 // Sapar Trade — торговый представитель. Модуль: заказ по магазину — каталог 1С (Цена Прайс, остатки), корзина, отправка
 // Итог пересчитывает сервер по ценам 1С; после отправки агент создаёт в 1С реализацию (непроведённую) для оператора.
 
-function TpOrder({ session, authLost, store, catalog, onBack, onDone, showToast }) {
+function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onDone, showToast }) {
   const [q, setQ] = useState("");
   const [grp, setGrp] = useState("");
-  const [cart, setCart] = useState({});
   const [confirm, setConfirm] = useState(false);
   const [comment, setComment] = useState("");
   const [delivery, setDelivery] = useState(stShift(stToday(), 1));

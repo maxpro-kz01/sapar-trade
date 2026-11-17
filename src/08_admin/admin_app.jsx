@@ -10,7 +10,7 @@ function adminTabsFor(session) {
 
 function AdminLiveApp({ session, setSession, onExit }) {
   const tabs = adminTabsFor(session);
-  const [tab, setTab] = useState(tabs[0]);
+  const [tab, setTab] = useNavState("adm", tabs[0], (v) => tabs.includes(v)); // «Назад» — предыдущая вкладка
   const [toast, setToast] = useState(null);
   const [pwd, setPwd] = useState(false);
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2400); };

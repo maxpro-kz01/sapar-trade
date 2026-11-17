@@ -3,8 +3,10 @@
 
 function MgmtApp({ session, setSession, onExit }) {
   const tabs = mgTabsFor(session);
-  const [tab, setTab] = useState("home");
-  const [param, setParam] = useState(null);
+  // вкладка и карточка — в истории браузера: «Назад» возвращает на предыдущую (nav_history.js)
+  const [nav, setNav] = useNavState("mg", { tab: "home", param: null }, (v) => v && tabs.includes(v.tab));
+  const { tab, param } = nav;
+  const setParam = (prm) => setNav({ tab, param: prm || null });
   const [period, setPeriod] = useState("month");
   const [custom, setCustom] = useState({ from: stShift(stToday(), -13), to: stToday() });
   const [toast, setToast] = useState(null);
@@ -13,7 +15,7 @@ function MgmtApp({ session, setSession, onExit }) {
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2200); };
   const range = stRange(period, custom);
   const authLost = (msg) => onExit(msg || "Сессия завершена, войдите снова");
-  const go = (t, prm) => { if (!tabs.includes(t)) return; setParam(prm || null); setTab(t); setBell(false); };
+  const go = (t, prm) => { if (!tabs.includes(t)) return; setBell(false); setNav({ tab: t, param: prm || null }); };
   const pick = (t) => go(t, null);
   const problems = useLive(session, "/api/problems", authLost);
   const alerts = problems.data ? problems.data.items.filter((x) => x.lvl !== "green") : [];

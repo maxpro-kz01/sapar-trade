@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="029a7d6f4a18" />
+<meta name="st-build" content="ef79f573d521" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -2579,6 +2579,7 @@ function Modal({
   children,
   wide
 }) {
+  useBackClose(onClose);
   return React.createElement("div", {
     className: "absolute inset-0 z-40 flex items-end kz-modal",
     style: {
@@ -7629,7 +7630,7 @@ function MgSystem(p) {
     session
   } = p;
   const parts = [liveCan(session, "sync") && ["sync", "Интеграция 1С"], liveCan(session, "users") && ["users", "Сотрудники"], liveCan(session, "audit") && ["audit", "Журнал действий"]].filter(Boolean);
-  const [part, setPart] = useState(parts[0] ? parts[0][0] : null);
+  const [part, setPart] = useNavState("mg.sys", parts[0] ? parts[0][0] : null, v => parts.some(([id]) => id === v));
   return React.createElement(React.Fragment, null, React.createElement("div", {
     className: "flex gap-1.5 mb-3 overflow-x-auto pb-1"
   }, parts.map(([id, l]) => React.createElement(LiveChip, {
@@ -7644,8 +7645,18 @@ function MgmtApp({
   onExit
 }) {
   const tabs = mgTabsFor(session);
-  const [tab, setTab] = useState("home");
-  const [param, setParam] = useState(null);
+  const [nav, setNav] = useNavState("mg", {
+    tab: "home",
+    param: null
+  }, v => v && tabs.includes(v.tab));
+  const {
+    tab,
+    param
+  } = nav;
+  const setParam = prm => setNav({
+    tab,
+    param: prm || null
+  });
   const [period, setPeriod] = useState("month");
   const [custom, setCustom] = useState({
     from: stShift(stToday(), -13),
@@ -7662,9 +7673,11 @@ function MgmtApp({
   const authLost = msg => onExit(msg || "Сессия завершена, войдите снова");
   const go = (t, prm) => {
     if (!tabs.includes(t)) return;
-    setParam(prm || null);
-    setTab(t);
     setBell(false);
+    setNav({
+      tab: t,
+      param: prm || null
+    });
   };
   const pick = t => go(t, null);
   const problems = useLive(session, "/api/problems", authLost);
@@ -8289,7 +8302,7 @@ function AdminLiveApp({
   onExit
 }) {
   const tabs = adminTabsFor(session);
-  const [tab, setTab] = useState(tabs[0]);
+  const [tab, setTab] = useNavState("adm", tabs[0], v => tabs.includes(v));
   const [toast, setToast] = useState(null);
   const [pwd, setPwd] = useState(false);
   const showToast = m => {
@@ -8475,13 +8488,14 @@ function TpOrder({
   authLost,
   store,
   catalog,
+  cart,
+  setCart,
   onBack,
   onDone,
   showToast
 }) {
   const [q, setQ] = useState("");
   const [grp, setGrp] = useState("");
-  const [cart, setCart] = useState({});
   const [confirm, setConfirm] = useState(false);
   const [comment, setComment] = useState("");
   const [delivery, setDelivery] = useState(stShift(stToday(), 1));
@@ -8735,8 +8749,28 @@ function TpApp({
   setSession,
   onExit
 }) {
-  const [tab, setTab] = useState("stores");
-  const [store, setStore] = useState(null);
+  const [nav, setNav] = useNavState("tp", {
+    tab: "stores",
+    store: null
+  }, v => v && Object.hasOwn(TP_TABS, v.tab));
+  const {
+    tab,
+    store
+  } = nav;
+  const setStore = st => setNav({
+    tab: "stores",
+    store: st || null
+  });
+  const setTab = t => setNav({
+    tab: t,
+    store: null
+  });
+  const [carts, setCarts] = useState({});
+  const cartOf = code => carts[code] || {};
+  const setCartOf = code => upd => setCarts(all => ({
+    ...all,
+    [code]: typeof upd === "function" ? upd(all[code] || {}) : upd
+  }));
   const [toast, setToast] = useState(null);
   const [pwd, setPwd] = useState(false);
   const showToast = m => {
@@ -8754,10 +8788,7 @@ function TpApp({
     param: null,
     setParam: () => {}
   };
-  const pick = id => {
-    setStore(null);
-    setTab(id);
-  };
+  const pick = id => setTab(id);
   return React.createElement("div", {
     className: "relative h-full flex flex-col kz-app",
     style: {
@@ -8817,9 +8848,11 @@ function TpApp({
   })), tab === "stores" && store && React.createElement(TpOrder, _extends({}, p, {
     store: store,
     catalog: catalog,
-    onBack: () => setStore(null),
+    cart: cartOf(store.code),
+    setCart: setCartOf(store.code),
+    onBack: () => history.back(),
     onDone: () => {
-      setStore(null);
+      setCartOf(store.code)({});
       setTab("orders");
     }
   })), tab === "orders" && React.createElement(OrdersBoard, _extends({}, p, {
@@ -9341,6 +9374,140 @@ function DriverGpsPanel({
     }
   }, w)));
 }
+const navCur = () => history.state && history.state.st ? history.state : {
+  st: 1,
+  nav: {}
+};
+const navRead = (key, fallback) => {
+  const s = navCur();
+  return Object.prototype.hasOwnProperty.call(s.nav, key) ? s.nav[key] : fallback;
+};
+const navSame = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function navPush(patch) {
+  const s = navCur();
+  const next = {
+    st: 1,
+    nav: {
+      ...s.nav,
+      ...patch
+    }
+  };
+  if (s.modal || s.guard) history.replaceState(next, "");else history.pushState(next, "");
+}
+function navReplace(patch, extra) {
+  const s = navCur();
+  history.replaceState({
+    st: 1,
+    nav: {
+      ...s.nav,
+      ...patch
+    },
+    ...(extra || {})
+  }, "");
+}
+function useNavState(key, initial, valid) {
+  const ok = v => valid ? valid(v) : true;
+  const read = () => {
+    const v = navRead(key, initial);
+    return ok(v) ? v : initial;
+  };
+  const [val, setVal] = useState(read);
+  useEffect(() => {
+    if (!navSame(navRead(key, undefined), val)) navReplace({
+      [key]: val
+    });
+    const on = () => setVal(read());
+    window.addEventListener("popstate", on);
+    return () => window.removeEventListener("popstate", on);
+  }, [key]);
+  const set = nv => {
+    const cur = navRead(key, initial);
+    const v = typeof nv === "function" ? nv(cur) : nv;
+    setVal(v);
+    if (!navSame(v, cur)) navPush({
+      [key]: v
+    });
+  };
+  const replace = v => {
+    setVal(v);
+    navReplace({
+      [key]: v
+    });
+  };
+  return [val, set, replace];
+}
+function useBackClose(onClose) {
+  const ref = useRef(onClose);
+  ref.current = onClose;
+  useEffect(() => {
+    const id = "m" + Math.random().toString(36).slice(2, 9);
+    const s = navCur();
+    history.pushState({
+      st: 1,
+      nav: s.nav,
+      modal: id
+    }, "");
+    let byBack = false;
+    const on = e => {
+      if (e.state && e.state.modal === id) return;
+      byBack = true;
+      ref.current();
+    };
+    window.addEventListener("popstate", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      if (!byBack && history.state && history.state.modal === id) history.back();
+    };
+  }, []);
+}
+const NAV_GUARD_KEY = "st.navGuard";
+const navGuardSet = {
+  get() {
+    try {
+      return sessionStorage.getItem(NAV_GUARD_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  },
+  set(on) {
+    try {
+      if (on) sessionStorage.setItem(NAV_GUARD_KEY, "1");else sessionStorage.removeItem(NAV_GUARD_KEY);
+    } catch (e) {}
+  }
+};
+function useBackGuard(active) {
+  useEffect(() => {
+    if (!active) return undefined;
+    if (!navGuardSet.get()) {
+      const s = navCur();
+      history.replaceState({
+        st: 1,
+        nav: s.nav,
+        guard: true
+      }, "");
+      history.pushState({
+        st: 1,
+        nav: s.nav
+      }, "");
+      navGuardSet.set(true);
+    }
+    const on = e => {
+      if (e.state && e.state.guard) history.pushState({
+        st: 1,
+        nav: e.state.nav
+      }, "");
+    };
+    window.addEventListener("popstate", on);
+    return () => window.removeEventListener("popstate", on);
+  }, [active]);
+}
+function navReset(nav) {
+  history.replaceState({
+    st: 1,
+    nav: nav || {}
+  }, "");
+  navGuardSet.set(false);
+}
 const ST_BUILD = (document.querySelector('meta[name="st-build"]') || {}).content || "dev";
 const ST_VERSION_EVERY_MS = 5 * 60 * 1000;
 function useNewVersion() {
@@ -9418,10 +9585,19 @@ function App() {
     setLiveSessionState(v);
   };
   const [liveNotice, setLiveNotice] = useState("");
-  const [loginMode, setLoginMode] = useState("mgmt");
   const clientMode = location.hash === "#client";
   const HOME = clientMode ? "client" : "staffChoice";
-  const [view, setView] = useState(() => stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME);
+  const [root, setRoot, replaceRoot] = useNavState("root", {
+    view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME,
+    mode: "mgmt"
+  });
+  const loginMode = root.mode || "mgmt";
+  const view = root.view === "live" && !liveSession ? HOME : root.view;
+  const setView = v => setRoot({
+    view: v,
+    mode: loginMode
+  });
+  useBackGuard(view === "live");
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
   const [profile, setProfile] = useState({
@@ -9519,25 +9695,38 @@ function App() {
     onAdminTrigger: () => setView("staffChoice")
   }), view === "staffChoice" && React.createElement(StaffGate, {
     onCancel: clientMode ? () => setView("client") : null,
-    onPick: mode => {
-      setLoginMode(mode);
-      setView("liveLogin");
-    }
+    onPick: mode => setRoot({
+      view: "liveLogin",
+      mode,
+      from: "gate"
+    })
   }), view === "liveLogin" && React.createElement(LiveLogin, {
     mode: loginMode,
     notice: liveNotice,
-    onCancel: () => setView("staffChoice"),
+    onCancel: () => root.from === "gate" ? history.back() : replaceRoot({
+      view: "staffChoice",
+      mode: loginMode
+    }),
     onSuccess: s => {
       setLiveNotice("");
       setLiveSession(s);
-      setView("live");
+      replaceRoot({
+        view: "live",
+        mode: loginMode
+      });
     }
   }), view === "live" && liveSession && (() => {
     const exit = msg => {
-      setLoginMode(liveSession.mode || "mgmt");
+      const next = {
+        view: msg ? "liveLogin" : HOME,
+        mode: liveSession.mode || "mgmt"
+      };
       setLiveSession(null);
       setLiveNotice(msg || "");
-      setView(msg ? "liveLogin" : HOME);
+      navReset({
+        root: next
+      });
+      replaceRoot(next);
     };
     const App2 = liveSession.mode === "driver" || liveSession.user.role === "driver" ? DriverApp : liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;
     return React.createElement(App2, {

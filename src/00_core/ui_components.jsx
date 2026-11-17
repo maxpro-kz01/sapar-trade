@@ -116,6 +116,7 @@ function Toggle({ checked, onChange }) {
 }
 
 function Modal({ title, onClose, children, wide }) {
+  useBackClose(onClose); // «Назад» в браузере/телефоне закрывает окно (nav_history.js)
   return (
     <div className="absolute inset-0 z-40 flex items-end kz-modal" style={{ background: "rgba(22,19,39,0.45)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}

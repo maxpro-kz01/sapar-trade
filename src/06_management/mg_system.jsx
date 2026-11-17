@@ -22,7 +22,7 @@ function MgAudit({ session, authLost }) {
 function MgSystem(p) {
   const { session } = p;
   const parts = [liveCan(session, "sync") && ["sync", "Интеграция 1С"], liveCan(session, "users") && ["users", "Сотрудники"], liveCan(session, "audit") && ["audit", "Журнал действий"]].filter(Boolean);
-  const [part, setPart] = useState(parts[0] ? parts[0][0] : null);
+  const [part, setPart] = useNavState("mg.sys", parts[0] ? parts[0][0] : null, (v) => parts.some(([id]) => id === v));
   return (
     <>
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">

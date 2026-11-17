@@ -11,11 +11,17 @@ function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = (v) => { stSession.set(v); setLiveSessionState(v); };
   const [liveNotice, setLiveNotice] = useState("");
-  const [loginMode, setLoginMode] = useState("mgmt");
   // Стартовый экран — вход для сотрудников. Клиентское приложение (для магазинов) — по ссылке …/#client
   const clientMode = location.hash === "#client";
   const HOME = clientMode ? "client" : "staffChoice";
-  const [view, setView] = useState(() => (stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME));
+  // экран и вид входа — в истории браузера: «Назад» с формы входа ведёт к выбору роли (nav_history.js)
+  const [root, setRoot, replaceRoot] = useNavState("root",
+    { view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME, mode: "mgmt" });
+  const loginMode = root.mode || "mgmt";
+  // вернулись «Назад» в систему после выхода — показываем стартовый экран
+  const view = root.view === "live" && !liveSession ? HOME : root.view;
+  const setView = (v) => setRoot({ view: v, mode: loginMode });
+  useBackGuard(view === "live");
   const [lang, setLang] = useState(initialLang);
   useI18nDom(lang);
   const [profile, setProfile] = useState({ name: "", hasShop: false, shopName: "" });
@@ -59,10 +65,15 @@ function App() {
 
       <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
-        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(mode) => { setLoginMode(mode); setView("liveLogin"); }} />}
-        {view === "liveLogin" && <LiveLogin mode={loginMode} notice={liveNotice} onCancel={() => setView("staffChoice")} onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); setView("live"); }} />}
+        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(mode) => setRoot({ view: "liveLogin", mode, from: "gate" })} />}
+        {view === "liveLogin" && <LiveLogin mode={loginMode} notice={liveNotice} onCancel={() => (root.from === "gate" ? history.back() : replaceRoot({ view: "staffChoice", mode: loginMode }))}
+          onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); replaceRoot({ view: "live", mode: loginMode }); }} />}
         {view === "live" && liveSession && (() => {
-          const exit = (msg) => { setLoginMode(liveSession.mode || "mgmt"); setLiveSession(null); setLiveNotice(msg || ""); setView(msg ? "liveLogin" : HOME); };
+          // выход: прошлые экраны сотрудника из истории забываем, «Назад» в систему не вернёт
+          const exit = (msg) => {
+            const next = { view: msg ? "liveLogin" : HOME, mode: liveSession.mode || "mgmt" };
+            setLiveSession(null); setLiveNotice(msg || ""); navReset({ root: next }); replaceRoot(next);
+          };
           // водитель всегда попадает на экран рейса, через какой бы вход ни зашёл
           const App2 = liveSession.mode === "driver" || liveSession.user.role === "driver" ? DriverApp
             : liveSession.mode === "admin" ? AdminLiveApp : liveSession.mode === "tp" ? TpApp : MgmtApp;

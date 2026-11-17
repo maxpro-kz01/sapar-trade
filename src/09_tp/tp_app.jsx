@@ -4,8 +4,15 @@
 const TP_TABS = { stores: ["store", "Магазины"], orders: ["clipboard", "Мои заказы"], plan: ["trending-up", "Мой план"] };
 
 function TpApp({ session, setSession, onExit }) {
-  const [tab, setTab] = useState("stores");
-  const [store, setStore] = useState(null);
+  // вкладка и открытый магазин — в истории браузера: «Назад» из заказа ведёт к списку магазинов (nav_history.js)
+  const [nav, setNav] = useNavState("tp", { tab: "stores", store: null }, (v) => v && Object.hasOwn(TP_TABS, v.tab));
+  const { tab, store } = nav;
+  const setStore = (st) => setNav({ tab: "stores", store: st || null });
+  const setTab = (t) => setNav({ tab: t, store: null });
+  // корзина у каждого магазина своя и не теряется при «Назад» (пока открыт сайт)
+  const [carts, setCarts] = useState({});
+  const cartOf = (code) => carts[code] || {};
+  const setCartOf = (code) => (upd) => setCarts((all) => ({ ...all, [code]: typeof upd === "function" ? upd(all[code] || {}) : upd }));
   const [toast, setToast] = useState(null);
   const [pwd, setPwd] = useState(false);
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2600); };
@@ -13,7 +20,7 @@ function TpApp({ session, setSession, onExit }) {
   const catalog = useLive(session, "/api/catalog", authLost);
   const t = stToday();
   const p = { session, authLost, showToast, go: () => {}, param: null, setParam: () => {} };
-  const pick = (id) => { setStore(null); setTab(id); };
+  const pick = (id) => setTab(id);
   return (
     <div className="relative h-full flex flex-col kz-app" style={{ background: "var(--bg)" }}>
       <StatusBar />
@@ -29,7 +36,8 @@ function TpApp({ session, setSession, onExit }) {
       </div>
       <div className="flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main">
         {tab === "stores" && !store && <TpStores {...p} onOrder={setStore} />}
-        {tab === "stores" && store && <TpOrder {...p} store={store} catalog={catalog} onBack={() => setStore(null)} onDone={() => { setStore(null); setTab("orders"); }} />}
+        {tab === "stores" && store && <TpOrder {...p} store={store} catalog={catalog} cart={cartOf(store.code)} setCart={setCartOf(store.code)}
+          onBack={() => history.back()} onDone={() => { setCartOf(store.code)({}); setTab("orders"); }} />}
         {tab === "orders" && <OrdersBoard {...p} defaultFilter="all" />}
         {tab === "plan" && <MgTeam {...p} range={{ from: t.slice(0, 8) + "01", to: t }} />}
       </div>
