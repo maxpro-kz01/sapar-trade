@@ -35,7 +35,7 @@ export async function clients(user, { search, from, to, onlyDebtors, sleeping, m
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date < $4::date - 90) AS b90,
                       sum(amount) FILTER (WHERE amount > 0 AND doc_date IS NULL) AS bnone,
                       min(doc_date) FILTER (WHERE amount > 0) AS oldest
-               FROM onec_debts GROUP BY 1) d ON d.client_code = c.code
+               FROM onec_debts_open GROUP BY 1) d ON d.client_code = c.code
     LEFT JOIN (SELECT client_code, sum(revenue) AS revenue FROM onec_sales_daily WHERE day BETWEEN $2 AND $3 GROUP BY 1) s ON s.client_code = c.code
     LEFT JOIN (SELECT client_code, max(day) AS last_day FROM onec_sales_daily GROUP BY 1) ever ON ever.client_code = c.code
     WHERE ${where}`;

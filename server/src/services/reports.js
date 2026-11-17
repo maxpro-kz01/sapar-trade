@@ -106,7 +106,7 @@ export async function dashboard(user, range) {
       `SELECT coalesce(sum(amount) FILTER (WHERE amount > 0),0) AS total,
               coalesce(sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}),0) AS overdue,
               count(DISTINCT client_code) FILTER (WHERE amount > 0) AS clients
-       FROM onec_debts d WHERE true${f}`, p);
+       FROM onec_debts_open d WHERE true${f}`, p);
     out.debts = { total: round2(d.total), overdue: round2(d.overdue), clients: Number(d.clients), overdueDays: config.overdueDays };
   }
 

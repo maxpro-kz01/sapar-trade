@@ -43,7 +43,7 @@ export async function buildReport(from, to, adminName) {
     q(`SELECT coalesce(pr.name, s.product_code) AS name, sum(s.qty) AS qty, sum(s.revenue) AS sum FROM onec_sales_daily s
        LEFT JOIN onec_products pr ON pr.code = s.product_code WHERE s.day = $1 GROUP BY 1 ORDER BY sum DESC LIMIT 5`, [day]),
     q(`SELECT coalesce(sum(amount) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}),0) AS overdue,
-              count(DISTINCT client_code) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}) AS clients FROM onec_debts`, [overdueDate()]),
+              count(DISTINCT client_code) FILTER (WHERE amount > 0 AND ${overdueSql("", "$1")}) AS clients FROM onec_debts_open`, [overdueDate()]),
     q(`SELECT pr.name, pr.unit, coalesce(st.qty,0) AS stock, sp.per_day
        FROM (SELECT product_code, sum(qty) / 30.0 AS per_day FROM onec_sales_daily WHERE day BETWEEN $1 AND $2 GROUP BY 1) sp
        JOIN onec_products pr ON pr.code = sp.product_code
