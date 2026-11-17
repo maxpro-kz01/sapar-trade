@@ -33,6 +33,31 @@ test("каталог: цены по типу цен и остатки", async ()
   assert.equal((await api("GET", "/api/catalog", { token: tok.drv })).status, 403);
 });
 
+test("цены по типу цен договора магазина; без типа — «Цена Прайс» или самый частый", async () => {
+  // в тестовых данных нет «Цена Прайс» — берётся самый частый («Оптовая»)
+  const def = await api("GET", "/api/catalog?client=К-002", { token: tok.tp1 });
+  assert.equal(def.body.priceType, "Оптовая");
+  // у К-001 в договоре «Розничная»: цена только у товара 00001, остальные — без цены
+  const sendClients = (rows) => api("POST", "/api/sync/1c/clients", { agent: true, body: { rows } });
+  await sendClients(sample.clients.map((x) => (x.code === "К-001" ? { ...x, priceType: "Розничная" } : x)));
+  const c = await api("GET", "/api/catalog?client=К-001", { token: tok.tp1 });
+  assert.equal(c.body.priceType, "Розничная");
+  assert.equal(c.body.items.find((x) => x.code === "00001").price, 16500);
+  assert.ok(!(c.body.items.find((x) => x.code === "00002").price > 0), "у 00002 нет розничной цены");
+  assert.equal(c.body.noPrice, 2, "два товара с остатком без розничной цены (00002 и 00003)");
+  const r = await api("POST", "/api/orders", { token: tok.tp1, body: { clientCode: "К-001", items: [{ code: "00002", qty: 1 }] } });
+  assert.equal(r.status, 400, "товар без цены заказать нельзя");
+  const ok = await api("POST", "/api/orders", { token: tok.tp1, body: { clientCode: "К-001", items: [{ code: "00001", qty: 1 }] } });
+  assert.equal(ok.status, 201, ok.raw);
+  assert.equal(ok.body.total, 16500);
+  const row = (await env.pool.query("SELECT price_type FROM orders WHERE id = $1", [ok.body.id])).rows[0];
+  assert.equal(row.price_type, "Розничная", "заказ помнит тип цен — по нему агент создаст реализацию");
+  await env.pool.query("DELETE FROM orders WHERE id = $1", [ok.body.id]);
+  // другой магазин по-прежнему видит «Оптовую»
+  assert.equal((await api("GET", "/api/catalog?client=К-002", { token: tok.tp1 })).body.priceType, "Оптовая");
+  await sendClients(sample.clients); // вернуть как было — дальше тесты считают по «Оптовой»
+});
+
 test("ТП создаёт заказ своему клиенту; цены считает сервер", async () => {
   const r = await api("POST", "/api/orders", { token: tok.tp1, body: { clientCode: "К-001", items: [{ code: "00001", qty: 2, price: 1 }, { code: "00002", qty: 1 }, { code: "00001", qty: 1 }], comment: "до обеда" } });
   assert.equal(r.status, 201, r.raw);

@@ -1,12 +1,12 @@
-// Каталог для заказа: товары из 1С с ценой продажи («Цена Прайс») и общим остатком по складам.
+// Каталог для заказа: товары из 1С с ценой по типу цен договора магазина и общим остатком по складам.
 import { q } from "../db/pool.js";
 import { can } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
-import { priceType, freshness } from "./scope.js";
+import { priceTypeFor, freshness } from "./scope.js";
 
-export async function catalog(user) {
+export async function catalog(user, clientCode) {
   if (!can(user, "orders.create") && !can(user, "stock") && !can(user, "orders.all")) throw new HttpError(403, "Нет доступа");
-  const pt = await priceType();
+  const pt = await priceTypeFor(clientCode);
   const { rows } = await q(
     `SELECT pr.code, pr.name, coalesce(pr.group_name, 'Без группы') AS grp, pr.unit, pr.sku, p.price,
             coalesce(st.qty, 0) AS stock
@@ -16,5 +16,6 @@ export async function catalog(user) {
      WHERE p.price > 0 OR coalesce(st.qty, 0) > 0
      ORDER BY grp, pr.name`, [pt]);
   const groups = [...new Set(rows.map((r) => r.grp))];
-  return { priceType: pt, groups, items: rows, ...(await freshness()) };
+  const noPrice = rows.filter((r) => !(Number(r.price) > 0) && Number(r.stock) > 0).length; // есть на складе, но цены этого типа нет
+  return { priceType: pt, noPrice, groups, items: rows, ...(await freshness()) };
 }

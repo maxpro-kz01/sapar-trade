@@ -50,7 +50,7 @@ if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
-$AgentVersion = '1.3.0'
+$AgentVersion = '1.3.1'
 
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
@@ -348,7 +348,9 @@ function New-1CSale($Conn, $Order) {
   if (Test-Empty $contract) { throw "У клиента $($Order.client_code) не указан основной договор в 1С" }
   $org = Find-ByCode $Conn 'Организации' $OrderCfg.orgCode 'Организация'
   $wh = Find-ByCode $Conn 'Склады' $OrderCfg.warehouseCode 'Склад'
-  $pt = Find-ByName $Conn 'ТипыЦенНоменклатуры' $OrderCfg.priceType 'Тип цен'
+  # тип цен — тот, по которому ТП видел цены (из договора клиента); у старых заказов поля нет — берём из настроек
+  $ptName = if ($Order.PSObject.Properties['price_type'] -and $Order.price_type) { [string]$Order.price_type } else { $OrderCfg.priceType }
+  $pt = Find-ByName $Conn 'ТипыЦенНоменклатуры' $ptName 'Тип цен'
   $opKind = Com-Get (Com-Get (Com-Get $Conn 'Перечисления') 'ВидыОперацийРеализацияТоваров') 'ПродажаКомиссия'
 
   $doc = Com-Call (Com-Get (Com-Get $Conn 'Документы') 'РеализацияТоваровУслуг') 'СоздатьДокумент'

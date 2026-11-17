@@ -14,7 +14,7 @@ import { HttpError } from "../lib/http.js";
 const r = Router();
 r.use(requireAuth);
 
-r.get("/catalog", ah(async (req, res) => res.json(await catalog(req.user))));
+r.get("/catalog", ah(async (req, res) => res.json(await catalog(req.user, req.query.client))));
 
 r.get("/orders", ah(async (req, res) => res.json(await orders.listOrders(req.user, req.query))));
 r.post("/orders", ah(async (req, res) => {

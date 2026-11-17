@@ -46,6 +46,7 @@ function useLive(session, path, onAuthLost, refreshMs) {
     return () => clearInterval(t);
   }, [refreshMs]);
   useEffect(() => {
+    if (!path) return undefined; // path = null — пока нечего загружать (например, магазин ещё не выбран)
     let alive = true;
     setState((s) => ({ ...s, loading: !s.data, error: null }));
     stApi(path, { token: session.token })

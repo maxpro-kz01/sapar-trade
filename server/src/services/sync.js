@@ -38,8 +38,8 @@ export const ENTITIES = {
   warehouses: { every: 1440, table: "onec_warehouses", mode: "snapshot", pk: 1, cols: ["code", "name"],
     map: (r) => [key(r.code), str(r.name) || "(без названия)"] },
   // manager из карточки 1С кладём в manager_1c; итоговый ТП (manager) считает applyClientAgents
-  clients: { every: 60, table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager_1c", "phone", "address"],
-    map: (r) => [key(r.code), str(r.name) || "(без названия)", name(r.manager) || null, str(r.phone, 100), str(r.address, 500)],
+  clients: { every: 60, table: "onec_clients", mode: "snapshot", pk: 1, cols: ["code", "name", "manager_1c", "phone", "address", "price_type"],
+    map: (r) => [key(r.code), str(r.name) || "(без названия)", name(r.manager) || null, str(r.phone, 100), str(r.address, 500), name(r.priceType, 150) || null],
     after: applyClientAgents },
   client_agents: { every: 60, table: "onec_client_agents", optional: true, mode: "snapshot", pk: 3, cols: ["client_code", "agent", "source", "docs", "last_day"],
     map: (r) => {

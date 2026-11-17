@@ -45,6 +45,20 @@ export async function priceType() {
   return rows[0]?.price_type ?? "";
 }
 
+// Тип цен для заказа магазину: из основного договора клиента в 1С; если не указан — «Цена Прайс»
+// (DEFAULT_PRICE_TYPE), а если такого типа в 1С нет — самый частый.
+export async function priceTypeFor(clientCode) {
+  if (clientCode) {
+    const { rows: [c] } = await q("SELECT price_type FROM onec_clients WHERE code = $1", [String(clientCode)]);
+    if (c?.price_type) return c.price_type;
+  }
+  if (config.defaultPriceType) {
+    const { rowCount } = await q("SELECT 1 FROM onec_prices WHERE price_type = $1 LIMIT 1", [config.defaultPriceType]);
+    if (rowCount) return config.defaultPriceType;
+  }
+  return priceType();
+}
+
 export async function freshness() {
   const s = await syncStatus(config.staleMinutes);
   return { lastSync: s.lastSync, stale: s.stale };

@@ -1,9 +1,9 @@
-// Заказы покупателей из приложения (ТП). Цены и итог считает сервер по «Цене Прайс» из 1С — клиенту не доверяем.
+// Заказы покупателей из приложения (ТП). Цены и итог считает сервер по типу цен договора клиента из 1С — клиенту не доверяем.
 // Каждый новый заказ ставится в очередь для агента 1С: он создаёт в 1С «Заказ покупателя» (непроведённый).
 import { q, tx } from "../db/pool.js";
 import { can, managersOf } from "./rbac.js";
 import { HttpError, isIsoDate } from "../lib/http.js";
-import { priceType, round2 } from "./scope.js";
+import { priceTypeFor, round2 } from "./scope.js";
 import { getSettings } from "./settings.js";
 
 export const ORDER_STATUSES = ["Новый", "Принят", "Собран", "Отгружен", "Отменён"];
@@ -32,7 +32,7 @@ export async function createOrder(user, b) {
     if (!code || !Number.isFinite(qty) || qty <= 0 || qty > 100000) throw new HttpError(400, `Неверное количество: ${code || "без кода"}`);
     qtyByCode.set(code, round2((qtyByCode.get(code) || 0) + qty));
   }
-  const pt = await priceType();
+  const pt = await priceTypeFor(client.code);
   const { rows: prods } = await q(
     `SELECT pr.code, pr.name, pr.unit, p.price FROM onec_products pr
      LEFT JOIN onec_prices p ON p.product_code = pr.code AND p.price_type = $1 WHERE pr.code = ANY($2::text[])`,

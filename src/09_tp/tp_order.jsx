@@ -1,4 +1,4 @@
-// Sapar Trade — торговый представитель. Модуль: заказ по магазину — каталог 1С (Цена Прайс, остатки), корзина, отправка
+// Sapar Trade — торговый представитель. Модуль: заказ по магазину — каталог 1С (цены по договору магазина, остатки), корзина, отправка
 // Итог пересчитывает сервер по ценам 1С; после отправки агент создаёт в 1С реализацию (непроведённую) для оператора.
 
 function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onDone, showToast }) {
@@ -32,7 +32,8 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
       <MgCard>
         <p style={{ fontSize: 14, fontWeight: 800 }}>{store.name}</p>
         <p style={{ fontSize: 11, color: "var(--muted)" }}>{store.address || ""}{store.debt > 0 ? " · долг " + stMoney(store.debt) : ""}</p>
-        <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>Цены: «{catalog.data.priceType}» · остатки из 1С</p>
+        <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>Цены: «{catalog.data.priceType}» (по договору магазина) · остатки из 1С</p>
+        {catalog.data.noPrice > 0 && <p style={{ fontSize: 10.5, color: "#B7791F", marginTop: 2 }}>Без цены этого типа: {catalog.data.noPrice} поз. с остатком — заказать нельзя, цену нужно внести в 1С</p>}
       </MgCard>
       <LiveSearch value={q} onChange={setQ} placeholder="Поиск товара" />
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
@@ -48,7 +49,7 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
               <div className="flex-1 min-w-0">
                 <p style={{ fontSize: 12.5, fontWeight: 700 }}>{x.name}</p>
                 <p className="font-mono-kz" style={{ fontSize: 11, color: "var(--muted)" }}>
-                  {noPrice ? "нет цены" : stMoney(x.price)} · остаток <span style={{ color: x.stock > 0 ? "var(--muted)" : "var(--red)" }}>{stNum(x.stock)} {x.unit || ""}</span>
+                  {noPrice ? "нет цены «" + catalog.data.priceType + "»" : stMoney(x.price)} · остаток <span style={{ color: x.stock > 0 ? "var(--muted)" : "var(--red)" }}>{stNum(x.stock)} {x.unit || ""}</span>
                 </p>
               </div>
               {!noPrice && (

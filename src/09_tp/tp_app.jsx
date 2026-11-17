@@ -17,7 +17,8 @@ function TpApp({ session, setSession, onExit }) {
   const [pwd, setPwd] = useState(false);
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2600); };
   const authLost = (msg) => onExit(msg || "Сессия завершена, войдите снова");
-  const catalog = useLive(session, "/api/catalog", authLost);
+  // каталог зависит от магазина: цены — по типу цен его договора в 1С (ТЗ TZ_APP_LOGIN_PRICES, часть C)
+  const catalog = useLive(session, store ? "/api/catalog?client=" + encodeURIComponent(store.code) : null, authLost);
   const t = stToday();
   const p = { session, authLost, showToast, go: () => {}, param: null, setParam: () => {} };
   const pick = (id) => setTab(id);
