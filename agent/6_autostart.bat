@@ -5,5 +5,5 @@ rem Права администратора скрипт запросит сам
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-task.ps1"
 echo.
-echo Дальше — в синем окне PowerShell: введите пароль Windows. Зелёная надпись «Задание ... создано» — готово.
+echo Дальше — в синем окне PowerShell: введите пароль Windows (если пароля нет — оставьте пустым и нажмите OK). Зелёная надпись «Задание ... создано» — готово.
 pause
