@@ -35,7 +35,8 @@ function AdminDebtsSource({ session, authLost, showToast }) {
       {d.active === "buh" && (
         <div style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}>
           <div>Долг по Бухгалтерии: <b>{stMoney(d.buhTotal)}</b> · на сайте: <b>{stMoney(d.openTotal)}</b></div>
-          <div>Обновлено: {stFmtTime(d.buhLast)} · сопоставлено клиентов: {d.matched}{d.unmatched ? `, не найдено в УТП: ${d.unmatched}` : ""}</div>
+          <div>Обновлено: {stFmtTime(d.buhLast)} · сопоставлено клиентов: {d.matched}{d.binsReady ? ` (по БИН/ИИН: ${d.byBin})` : ""}{d.unmatched ? `, не найдено в УТП: ${d.unmatched}` : ""}</div>
+          {!d.binsReady && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>БИН/ИИН пока не получены — сопоставление по названию.</div>}
           {d.unmatchedTop.length > 0 && (
             <button className="underline" style={{ fontSize: 12, color: "var(--muted)" }} onClick={() => setShowMiss((v) => !v)}>
               {showMiss ? "Скрыть" : "Показать"} должников, которых нет в УТП

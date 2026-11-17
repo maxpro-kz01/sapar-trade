@@ -16,7 +16,10 @@ export async function debtsSourceInfo(user) {
            (SELECT coalesce(sum(amount), 0) FROM onec_debts_buh WHERE kind = 'bal' AND amount > 0) AS buh_total,
            (SELECT coalesce(sum(amount), 0) FROM onec_debts_open) AS open_total,
            (SELECT count(*) FROM onec_debts_buh_map WHERE matched) AS matched,
-           (SELECT count(*) FROM onec_debts_buh_map WHERE NOT matched) AS unmatched`);
+           (SELECT count(*) FROM onec_debts_buh_map WHERE NOT matched) AS unmatched,
+           (SELECT count(*) FROM onec_debts_buh_map WHERE matched_by = 'bin') AS by_bin,
+           (SELECT count(*) FROM onec_buh_bins) AS buh_bins,
+           (SELECT count(*) FROM onec_client_bins) AS utp_bins`);
   const { rows: miss } = await q(`
     SELECT m.buh_code AS code, m.client_name AS name, sum(b.amount) AS amount
     FROM onec_debts_buh_map m JOIN onec_debts_buh b ON b.client_code = m.buh_code AND b.kind = 'bal'
@@ -30,6 +33,8 @@ export async function debtsSourceInfo(user) {
     openTotal: n(t.open_total),
     matched: n(t.matched),
     unmatched: n(t.unmatched),
+    byBin: n(t.by_bin), // сколько сопоставлено по БИН/ИИН, остальные — по названию
+    binsReady: n(t.buh_bins) > 0 && n(t.utp_bins) > 0,
     unmatchedTop: miss.map((r) => ({ code: r.code, name: r.name, amount: n(r.amount) })),
   };
 }

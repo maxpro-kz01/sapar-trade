@@ -56,6 +56,11 @@ export const ENTITIES = {
   debts: { every: 5, table: "onec_debts", mode: "snapshot", pk: 0, cols: ["client_code", "doc_date", "doc_name", "amount"],
     map: (r) => [key(r.client), r.docDate ? date(r.docDate) : null, str(r.docName, 300), num(r.amount)] },
   // долги из 1С:Бухгалтерии, счёт 1274 (ТЗ TZ_DEBTS_BUH): сальдо + отгрузки по дням за год
+  // БИН/ИИН — для сопоставления долгов Бухгалтерии с клиентами; только цифры, пустое отбрасывает представление базы
+  client_bins: { every: 60, table: "onec_client_bins", optional: true, mode: "snapshot", pk: 1, cols: ["code", "bin"],
+    map: (r) => [key(r.code), str(r.bin, 50).replace(/\D/g, "")] },
+  buh_bins: { every: 60, table: "onec_buh_bins", optional: true, mode: "snapshot", pk: 1, cols: ["code", "bin"],
+    map: (r) => [key(r.code), str(r.bin, 50).replace(/\D/g, "")] },
   debts_buh: { every: 5, table: "onec_debts_buh", optional: true, mode: "snapshot", pk: 0, cols: ["kind", "client_code", "client_name", "day", "amount"],
     map: (r) => {
       const kind = String(r.kind ?? "").trim();

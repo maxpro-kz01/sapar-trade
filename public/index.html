@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="85eec8f008f8" />
+<meta name="st-build" content="6e94563d8722" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -8283,7 +8283,12 @@ function AdminDebtsSource({
       marginTop: 8,
       lineHeight: 1.6
     }
-  }, React.createElement("div", null, "\u0414\u043E\u043B\u0433 \u043F\u043E \u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438: ", React.createElement("b", null, stMoney(d.buhTotal)), " \xB7 \u043D\u0430 \u0441\u0430\u0439\u0442\u0435: ", React.createElement("b", null, stMoney(d.openTotal))), React.createElement("div", null, "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ", stFmtTime(d.buhLast), " \xB7 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432: ", d.matched, d.unmatched ? `, не найдено в УТП: ${d.unmatched}` : ""), d.unmatchedTop.length > 0 && React.createElement("button", {
+  }, React.createElement("div", null, "\u0414\u043E\u043B\u0433 \u043F\u043E \u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438: ", React.createElement("b", null, stMoney(d.buhTotal)), " \xB7 \u043D\u0430 \u0441\u0430\u0439\u0442\u0435: ", React.createElement("b", null, stMoney(d.openTotal))), React.createElement("div", null, "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ", stFmtTime(d.buhLast), " \xB7 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432: ", d.matched, d.binsReady ? ` (по БИН/ИИН: ${d.byBin})` : "", d.unmatched ? `, не найдено в УТП: ${d.unmatched}` : ""), !d.binsReady && React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, "\u0411\u0418\u041D/\u0418\u0418\u041D \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u044B \u2014 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u043E \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044E."), d.unmatchedTop.length > 0 && React.createElement("button", {
     className: "underline",
     style: {
       fontSize: 12,

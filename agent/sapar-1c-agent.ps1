@@ -50,7 +50,7 @@ if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
-$AgentVersion = '1.3.1'
+$AgentVersion = '1.4.0'
 
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
@@ -59,7 +59,7 @@ $Cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 # так новые выгрузки начинают работать после обновления агента без правки config.json.
 $DefaultSchedule = [ordered]@{
   stock = 5; prices = 5; sales = 5; cost = 5; debts = 5; cash = 5; cashflow = 5; debts_buh = 5
-  products = 60; clients = 60; client_agents = 60; cf_articles = 1440; warehouses = 1440
+  products = 60; clients = 60; client_agents = 60; client_bins = 60; buh_bins = 60; cf_articles = 1440; warehouses = 1440
 }
 if (-not $Cfg.PSObject.Properties['schedule']) { $Cfg | Add-Member -NotePropertyName schedule -NotePropertyValue (New-Object psobject) }
 foreach ($k in $DefaultSchedule.Keys) {
@@ -70,7 +70,9 @@ $OrderCfg = @{ orgCode = '000000001'; warehouseCode = '000000001'; priceType = '
 if ($Cfg.PSObject.Properties['orders']) { foreach ($p in $Cfg.orders.PSObject.Properties) { $OrderCfg[$p.Name] = [string]$p.Value } }
 $RangeEntities = @('sales', 'cost', 'cashflow')   # выгружаются за период (от/до)
 # Выгрузки из второй базы — 1С:Бухгалтерии (ТЗ TZ_DEBTS_BUH). Работают, только если в config.json есть onecBuh.
-$BuhEntities = @('debts_buh')
+$BuhEntities = @('debts_buh', 'buh_bins')
+# Необязательные выгрузки: если в базе нет нужного реквизита (БИН/ИИН), пишем предупреждение и работаем дальше — это не поломка
+$SoftEntities = @('client_bins', 'buh_bins')
 $HasBuh = [bool]$Cfg.PSObject.Properties['onecBuh']
 
 $LogDir = Join-Path $Root 'logs'
@@ -289,7 +291,7 @@ function Get-Params([string]$Entity, [datetime]$From, [datetime]$To) {
   # ТП клиента — по реализациям за последние 90 дней
   if ($Entity -eq 'client_agents') { $p['Начало'] = (Get-Date).Date.AddDays(-90); $p['Конец'] = [datetime]::Now }
   # отгрузки по счёту 1274 за год — для возраста долга
-  if ($Entity -eq 'debts_buh') { $p['Начало'] = (Get-Date).Date.AddDays(-365); $p['Конец'] = [datetime]::Now }
+  if ($Entity -in @('debts_buh', 'buh_bins')) { $p['Начало'] = (Get-Date).Date.AddDays(-365); $p['Конец'] = [datetime]::Now }
   return $p
 }
 
@@ -624,8 +626,8 @@ try {
       Sync-Entity $conn $e $sec.AgentKey $from $to
       $state | Add-Member -NotePropertyName $e -NotePropertyValue (Get-Date).ToString('s', $Inv) -Force
     } catch {
-      $errors++
-      Write-Log 'ERROR' "$e`: $($_.Exception.Message)"
+      if ($e -in $SoftEntities) { $state | Add-Member -NotePropertyName $e -NotePropertyValue (Get-Date).ToString('s', $Inv) -Force; Write-Log 'WARN' "$e (необязательная выгрузка, пропущена): $($_.Exception.Message)" }
+      else { $errors++; Write-Log 'ERROR' "$e`: $($_.Exception.Message)" }
     }
   }
   Save-State $state

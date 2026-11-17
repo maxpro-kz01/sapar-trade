@@ -55,7 +55,7 @@ bat = "\r\n".join([
     ")",
     "echo.",
     "echo === Отправка новых данных (ТП клиентов, деньги, долги) ===",
-    'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sapar-1c-agent.ps1" -Only "clients,client_agents,debts,cash,cf_articles,cashflow"',
+    'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sapar-1c-agent.ps1" -Only "clients,client_agents,client_bins,buh_bins,debts,debts_buh,cash,cf_articles,cashflow"',
     "echo.",
     "echo Готово. Агент обновлён. Сообщите разработчику.",
     "pause",

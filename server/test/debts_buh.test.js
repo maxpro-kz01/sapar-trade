@@ -90,3 +90,38 @@ test("неверный kind — ошибка, данные не меняются
   assert.equal(r.status, 400);
   assert.equal((await open()).length, 5);
 });
+
+test("БИН/ИИН: контрагент с другим названием в Бухгалтерии находится по БИН; повтор БИН в УТП — по названию", async () => {
+  await send("clients", { rows: [
+    { code: "К-1", name: "Маг Азат", manager: "Жасулан" },
+    { code: "К-2", name: "Маг Айда", manager: "Жасулан" },
+    { code: "К-3", name: "Маг Акенже", manager: "Жасулан" },
+    { code: "К-9", name: "ТОО Рахат", manager: "Жасулан" },
+    { code: "К-10", name: "ИП Рахат-2", manager: "Жасулан" },
+  ] });
+  assert.equal((await send("client_bins", { rows: [
+    { code: "К-9", bin: "123456789012" },
+    { code: "К-1", bin: "111111111111" }, { code: "К-10", bin: "111111111111" }, // один БИН у двух клиентов УТП — не доверяем
+    { code: "К-2", bin: "12345" },                                              // не 12 цифр — мусор
+  ] })).status, 200);
+  assert.equal((await send("buh_bins", { rows: [
+    { code: "000009", bin: "1234 5678 9012" },  // пробелы в БИН убираем
+    { code: "000001", bin: "111111111111" },
+    { code: "000002", bin: "12345" },
+  ] })).status, 200);
+  await send("debts_buh", { rows: [
+    { kind: "bal", client: "000009", clientName: "Рахат ТОО (Кызылорда)", amount: 40000 },
+    { kind: "dt", client: "000009", clientName: "Рахат ТОО (Кызылорда)", dt: day(-3), amount: 40000 },
+    { kind: "bal", client: "000001", clientName: "Маг  азат", amount: 10000 },
+    { kind: "dt", client: "000001", clientName: "Маг  азат", dt: day(-2), amount: 10000 },
+  ] });
+  const { rows } = await env.pool.query("SELECT buh_code, client_code, matched, matched_by FROM onec_debts_buh_map WHERE buh_code IN ('000009', '000001') ORDER BY 1");
+  assert.deepEqual(rows, [
+    { buh_code: "000001", client_code: "К-1", matched: true, matched_by: "name" }, // БИН не однозначен → по названию
+    { buh_code: "000009", client_code: "К-9", matched: true, matched_by: "bin" },
+  ]);
+  assert.ok((await open()).some((r) => r[0] === "К-9" && r[2] === 40000), "долг пришёл на клиента, найденного по БИН");
+  const info = await api("GET", "/api/settings/debts", { token: tok });
+  assert.equal(info.body.byBin, 1);
+  assert.equal(info.body.binsReady, true);
+});
