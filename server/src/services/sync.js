@@ -55,6 +55,13 @@ export const ENTITIES = {
     map: (r) => [key(r.warehouse), key(r.product), num(r.qty)] },
   debts: { every: 5, table: "onec_debts", mode: "snapshot", pk: 0, cols: ["client_code", "doc_date", "doc_name", "amount"],
     map: (r) => [key(r.client), r.docDate ? date(r.docDate) : null, str(r.docName, 300), num(r.amount)] },
+  // долги из 1С:Бухгалтерии, счёт 1274 (ТЗ TZ_DEBTS_BUH): сальдо + отгрузки по дням за год
+  debts_buh: { every: 5, table: "onec_debts_buh", optional: true, mode: "snapshot", pk: 0, cols: ["kind", "client_code", "client_name", "day", "amount"],
+    map: (r) => {
+      const kind = String(r.kind ?? "").trim();
+      if (kind !== "bal" && kind !== "dt") throw new Error(`kind должен быть bal или dt: ${r.kind}`);
+      return [kind, key(r.client), name(r.clientName, 300), kind === "dt" ? date(r.dt ?? r.day) : null, num(r.amount)];
+    } },
   sales: { every: 5, table: "onec_sales_daily", mode: "range", pk: 3, sum: true, cols: ["day", "product_code", "client_code", "qty", "revenue"],
     map: (r) => [date(r.day ?? r.dt), key(r.product), str(r.client, 100) || "", num(r.qty), num(r.revenue)] },
   cost: { every: 5, table: "onec_cost_daily", mode: "range", pk: 2, sum: true, cols: ["day", "product_code", "qty", "cost"],
@@ -127,7 +134,7 @@ export async function ingest(entity, body, agentHost) {
   try {
     const { spec, range, values } = parseRows(entity, body);
     // защита: пустой справочник — скорее ошибка запроса в 1С, а не пустая база
-    if (spec.mode === "snapshot" && values.length === 0 && !body.allowEmpty && !["debts", "stock", "client_agents", "cash"].includes(entity))
+    if (spec.mode === "snapshot" && values.length === 0 && !body.allowEmpty && !["debts", "debts_buh", "stock", "client_agents", "cash"].includes(entity))
       throw new HttpError(400, "Пустой снимок справочника — не применяю (allowEmpty: true, если это правда)");
     await tx(async (c) => {
       if (spec.mode === "snapshot") await c.query(`TRUNCATE ${spec.table}`);

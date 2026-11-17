@@ -38,6 +38,7 @@ param(
   [int]$Backfill = 0,
   [string[]]$Only = @(),
   [switch]$TryOrder,
+  [switch]$SetBuh,
   [string]$ConfigPath = ''
 )
 
@@ -49,7 +50,7 @@ if (-not $Root) { $Root = Split-Path -Parent $MyInvocation.MyCommand.Path }
 if (-not $ConfigPath) { $ConfigPath = Join-Path $Root 'config.json' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Inv = [Globalization.CultureInfo]::InvariantCulture
-$AgentVersion = '1.2.0'
+$AgentVersion = '1.3.0'
 
 # ---------- настройки ----------
 if (-not (Test-Path $ConfigPath)) { throw "Нет файла настроек $ConfigPath. Скопируйте config.example.json в config.json и заполните." }
@@ -57,7 +58,7 @@ $Cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 # Расписание по умолчанию (минуты). Типы, которых нет в config.json, берутся отсюда —
 # так новые выгрузки начинают работать после обновления агента без правки config.json.
 $DefaultSchedule = [ordered]@{
-  stock = 5; prices = 5; sales = 5; cost = 5; debts = 5; cash = 5; cashflow = 5
+  stock = 5; prices = 5; sales = 5; cost = 5; debts = 5; cash = 5; cashflow = 5; debts_buh = 5
   products = 60; clients = 60; client_agents = 60; cf_articles = 1440; warehouses = 1440
 }
 if (-not $Cfg.PSObject.Properties['schedule']) { $Cfg | Add-Member -NotePropertyName schedule -NotePropertyValue (New-Object psobject) }
@@ -68,6 +69,9 @@ foreach ($k in $DefaultSchedule.Keys) {
 $OrderCfg = @{ orgCode = '000000001'; warehouseCode = '000000001'; priceType = 'Цена Прайс' }
 if ($Cfg.PSObject.Properties['orders']) { foreach ($p in $Cfg.orders.PSObject.Properties) { $OrderCfg[$p.Name] = [string]$p.Value } }
 $RangeEntities = @('sales', 'cost', 'cashflow')   # выгружаются за период (от/до)
+# Выгрузки из второй базы — 1С:Бухгалтерии (ТЗ TZ_DEBTS_BUH). Работают, только если в config.json есть onecBuh.
+$BuhEntities = @('debts_buh')
+$HasBuh = [bool]$Cfg.PSObject.Properties['onecBuh']
 
 $LogDir = Join-Path $Root 'logs'
 $StatePath = Join-Path $Root 'state.json'
@@ -87,8 +91,11 @@ function Save-Secrets {
   $p2 = Read-Host 'Ключ агента от разработчика (если ещё нет — просто Enter)' -AsSecureString
   $key = $null
   if ($p2.Length -gt 0) { $key = ConvertFrom-SecureString $p2 }
-  @{ onecPassword = (ConvertFrom-SecureString $p1); agentKey = $key } |
-    ConvertTo-Json | Set-Content -Path $SecretsPath -Encoding UTF8
+  $old = $null
+  if (Test-Path $SecretsPath) { $old = Get-Content $SecretsPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+  $out = @{ onecPassword = (ConvertFrom-SecureString $p1); agentKey = $key }
+  if ($old -and $old.PSObject.Properties['buhPassword']) { $out.buhPassword = $old.buhPassword }
+  $out | ConvertTo-Json | Set-Content -Path $SecretsPath -Encoding UTF8
   Write-Host "Сохранено в $SecretsPath (расшифровать может только пользователь $env:USERNAME на этом компьютере)." -ForegroundColor Green
 }
 function Get-Plain([string]$enc) {
@@ -101,7 +108,31 @@ function Read-Secrets {
   $s = Get-Content $SecretsPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $key = $null
   if ($s.agentKey) { $key = Get-Plain $s.agentKey }
-  return @{ OnecPassword = (Get-Plain $s.onecPassword); AgentKey = $key }
+  $buh = $null
+  if ($s.PSObject.Properties['buhPassword'] -and $s.buhPassword) { $buh = Get-Plain $s.buhPassword }
+  return @{ OnecPassword = (Get-Plain $s.onecPassword); AgentKey = $key; BuhPassword = $buh }
+}
+
+# Подключение к 1С:Бухгалтерии: имя базы и пользователь — в config.json (onecBuh), пароль — в secrets.dat (DPAPI).
+function Save-BuhSettings {
+  Write-Host 'Подключение к 1С:Бухгалтерии (сервер тот же, что у УТП: ' $Cfg.onec.server ')' -ForegroundColor Cyan
+  Write-Host 'Имя базы — как в окне запуска 1С: строка «Srvr=...;Ref=ИМЯ» → нужно ИМЯ.'
+  $base = Read-Host 'Имя базы Бухгалтерии на сервере'
+  $user = Read-Host 'Пользователь Бухгалтерии (только чтение, например sapar_api)'
+  $pw = Read-Host 'Пароль этого пользователя (если пароля нет — просто Enter)' -AsSecureString
+  if (-not $base -or -not $user) { throw 'Имя базы и пользователь обязательны.' }
+  $srv = Read-Host "Сервер 1С (Enter — тот же: $($Cfg.onec.server))"
+  if (-not $srv) { $srv = $Cfg.onec.server }
+  $raw = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $val = [pscustomobject]@{ server = $srv; base = $base.Trim(); user = $user.Trim() }
+  if ($raw.PSObject.Properties['onecBuh']) { $raw.onecBuh = $val } else { $raw | Add-Member -NotePropertyName onecBuh -NotePropertyValue $val }
+  $raw | ConvertTo-Json -Depth 5 | Set-Content -Path $ConfigPath -Encoding UTF8
+  $s = Get-Content $SecretsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $enc = if ($pw.Length -gt 0) { ConvertFrom-SecureString $pw } else { '' }
+  if ($s.PSObject.Properties['buhPassword']) { $s.buhPassword = $enc } else { $s | Add-Member -NotePropertyName buhPassword -NotePropertyValue $enc }
+  $s | ConvertTo-Json | Set-Content -Path $SecretsPath -Encoding UTF8
+  $Cfg | Add-Member -NotePropertyName onecBuh -NotePropertyValue $val -Force
+  Write-Host 'Сохранено.' -ForegroundColor Green
 }
 
 # ---------- JSON (свой быстрый сериализатор: числа всегда с точкой, даты ГГГГ-ММ-ДД) ----------
@@ -216,9 +247,10 @@ function Get-1CInfo($Conn) {
   return @{ Name = (Com-Get $md 'Name'); Version = (Com-Get $md 'Version'); Synonym = (Com-Call $Conn 'String' @((Com-Get $md 'Synonym'))) }
 }
 
-function Connect-1C([string]$Password) {
+function Connect-1C([string]$Password, $Section = $Cfg.onec) {
   $connector = New-Object -ComObject $Cfg.onec.comProgId
-  $cs = 'Srvr="{0}";Ref="{1}";Usr="{2}";Pwd="{3}";' -f $Cfg.onec.server, $Cfg.onec.base, $Cfg.onec.user, ($Password -replace '"', '""')
+  $srv = if ($Section.PSObject.Properties['server'] -and $Section.server) { $Section.server } else { $Cfg.onec.server }
+  $cs = 'Srvr="{0}";Ref="{1}";Usr="{2}";Pwd="{3}";' -f $srv, $Section.base, $Section.user, ([string]$Password -replace '"', '""')
   return $connector.Connect($cs)
 }
 
@@ -256,6 +288,8 @@ function Get-Params([string]$Entity, [datetime]$From, [datetime]$To) {
   if ($Entity -in $RangeEntities) { $p['Начало'] = $From.Date; $p['Конец'] = $To.Date.AddDays(1).AddSeconds(-1) }
   # ТП клиента — по реализациям за последние 90 дней
   if ($Entity -eq 'client_agents') { $p['Начало'] = (Get-Date).Date.AddDays(-90); $p['Конец'] = [datetime]::Now }
+  # отгрузки по счёту 1274 за год — для возраста долга
+  if ($Entity -eq 'debts_buh') { $p['Начало'] = (Get-Date).Date.AddDays(-365); $p['Конец'] = [datetime]::Now }
   return $p
 }
 
@@ -476,7 +510,7 @@ function Invoke-Probe($Conn) {
     foreach ($row in $r.Rows) { [void]$lines.Add("  $($row[0])") }
   } catch { [void]$lines.Add("  ошибка: $($_.Exception.Message)") }
   $to = (Get-Date).Date; $from = $to.AddDays(-7)
-  foreach ($e in $Cfg.schedule.PSObject.Properties.Name) {
+  foreach ($e in ($Cfg.schedule.PSObject.Properties.Name | Where-Object { $_ -notin $BuhEntities })) {
     [void]$lines.Add(''); [void]$lines.Add("=== Запрос $e (первые 5 строк)")
     try {
       $text = (Get-QueryText $e) -replace '(?i)^(\s*(//[^\n]*\n\s*)*)ВЫБРАТЬ', '$1ВЫБРАТЬ ПЕРВЫЕ 5'
@@ -528,10 +562,12 @@ function Invoke-Backfill($Conn, [string]$AgentKey, [int]$Days) {
 $Only = @($Only | ForEach-Object { $_ -split '[,; ]+' } | Where-Object { $_ })
 
 if ($SetSecrets) { Save-Secrets; return }
+if ($SetBuh) { Save-BuhSettings; $HasBuh = $true }
 
 # не запускать два цикла одновременно (если прошлый ещё идёт)
 $lock = $null
 $conn = $null
+$buhConn = $null
 try { $lock = [IO.File]::Open($LockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
 catch { Write-Log 'WARN' 'Предыдущий запуск ещё работает — пропускаю.'; return }
 
@@ -550,6 +586,19 @@ try {
     return
   }
 
+  # проверка Бухгалтерии: подключиться, показать конфигурацию и первые строки долгов по 1274, отправить их
+  if ($SetBuh) {
+    $buhConn = Connect-1C $sec.BuhPassword $Cfg.onecBuh
+    $info = Get-1CInfo $buhConn
+    Write-Host "Бухгалтерия: OK, конфигурация $($info.Synonym) $($info.Version)" -ForegroundColor Green
+    $d = Invoke-1CQuery $buhConn (Get-QueryText 'debts_buh') (Get-Params 'debts_buh' (Get-Date) (Get-Date))
+    $bal = 0; $nb = 0
+    foreach ($row in $d.Rows) { if ($row[0] -eq 'bal' -and [double]$row[4] -gt 0) { $bal += [double]$row[4]; $nb++ } }
+    Write-Host ('Счёт 1274: должников {0}, долг всего {1:N0} тг (строк {2})' -f $nb, $bal, $d.Rows.Count) -ForegroundColor Green
+    if ($sec.AgentKey) { Sync-Entity $buhConn 'debts_buh' $sec.AgentKey (Get-Date) (Get-Date) }
+    return
+  }
+
   $conn = Connect-1C $sec.OnecPassword
   if ($Probe) { Invoke-Probe $conn; return }
   if ($TryOrder) { Invoke-TryOrder $conn; return }
@@ -563,6 +612,13 @@ try {
   $errors = 0
   foreach ($e in $due) {
     try {
+      if ($e -in $BuhEntities) {
+        if (-not $HasBuh) { continue }   # Бухгалтерия не подключена (7_buhgalteria.bat) — пропускаем
+        if (-not $buhConn) { $buhConn = Connect-1C $sec.BuhPassword $Cfg.onecBuh }
+        Sync-Entity $buhConn $e $sec.AgentKey $from $to
+        $state | Add-Member -NotePropertyName $e -NotePropertyValue (Get-Date).ToString('s', $Inv) -Force
+        continue
+      }
       Sync-Entity $conn $e $sec.AgentKey $from $to
       $state | Add-Member -NotePropertyName $e -NotePropertyValue (Get-Date).ToString('s', $Inv) -Force
     } catch {
@@ -581,5 +637,6 @@ try {
   exit 2
 } finally {
   if ($conn) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($conn) }
+  if ($buhConn) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($buhConn) }
   if ($lock) { $lock.Close() }
 }

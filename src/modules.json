@@ -38,6 +38,7 @@
  "06_management/mg_app.jsx",
  "08_orders/orders_board.jsx",
  "08_admin/shift_report_text.js",
+ "08_admin/admin_debts_source.jsx",
  "08_admin/admin_shift.jsx",
  "08_admin/admin_app.jsx",
  "09_tp/tp_stores.jsx",

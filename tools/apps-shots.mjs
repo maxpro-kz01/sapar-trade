@@ -74,7 +74,7 @@ for (const [size, vp] of [["phone", [375, 812]], ["desktop", [1366, 800]]]) {
     await p.screenshot({ path: join(out, `phone_tp_03_confirm.png`) });
     await p.getByRole("button", { name: "Отправить заказ" }).click(); await p.waitForTimeout(1500);
     const ot = await text(p);
-    check(/СТ-\d{6}/.test(ot) && /ждёт отправки в 1С/.test(ot), "ТП: заказ отправлен и виден в «Мои заказы»");
+    check(/СТ-\d{6}/.test(ot), "ТП: заказ отправлен и виден в «Мои заказы»"); // отправка в 1С выключена по умолчанию — значка нет
     await p.screenshot({ path: join(out, `phone_tp_04_orders.png`) });
   }
   await tab(p, "Мой план");
@@ -106,6 +106,7 @@ for (const [size, vp] of [["phone", [375, 812]], ["desktop", [1366, 800]]]) {
     check((await overflow(p)) === 0 && !/Ошибка сервера|Нет доступа/.test(await text(p)), `${size} админ «${t}»`);
     await p.screenshot({ path: join(out, `${size}_adm_${t}.png`) });
   }
+  check(/Откуда брать долги клиентов/.test(await text(p)) && /Бухгалтерия \(1274\)/.test(await text(p)), `${size} админ: выбор источника долгов`);
   if (size === "phone") {
     await tab(p, "Смена");
     await p.getByRole("button", { name: "Завершить работу" }).click(); await p.waitForTimeout(1800);

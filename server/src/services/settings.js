@@ -4,7 +4,8 @@ import { can } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
 
 // onecOrders — агент создаёт в 1С «Реализацию» (непроведённую) по заказам из приложения (ТЗ финансов v1.2, часть D)
-export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false };
+// debtsSource — откуда брать долги клиентов: 'buh' — 1С:Бухгалтерия, счёт 1274 (ТЗ TZ_DEBTS_BUH), 'utp' — УТП
+export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false, debtsSource: "buh" };
 
 export async function getSettings() {
   const { rows } = await q("SELECT key, value FROM settings");
@@ -24,6 +25,10 @@ export async function saveSettings(user, b) {
   if (b?.onecOrders !== undefined) {
     if (typeof b.onecOrders !== "boolean") throw new HttpError(400, "onecOrders: да или нет");
     saved.onecOrders = b.onecOrders;
+  }
+  if (b?.debtsSource !== undefined) {
+    if (b.debtsSource !== "buh" && b.debtsSource !== "utp") throw new HttpError(400, "debtsSource: buh или utp");
+    saved.debtsSource = b.debtsSource;
   }
   for (const [k, v] of Object.entries(saved))
     await q(`INSERT INTO settings(key, value, updated_by) VALUES ($1,$2,$3)

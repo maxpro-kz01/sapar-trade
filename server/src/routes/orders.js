@@ -6,6 +6,7 @@ import { catalog } from "../services/catalog.js";
 import * as orders from "../services/orders.js";
 import * as shifts from "../services/shifts.js";
 import { getSettings, saveSettings } from "../services/settings.js";
+import { debtsSourceInfo } from "../services/debts_source.js";
 import { audit } from "../services/audit.js";
 import { can } from "../services/rbac.js";
 import { HttpError } from "../lib/http.js";
@@ -44,6 +45,7 @@ r.get("/settings", ah(async (req, res) => {
   if (!can(req.user, "settings") && !can(req.user, "shift")) throw new HttpError(403, "Нет доступа");
   res.json(await getSettings());
 }));
+r.get("/settings/debts", ah(async (req, res) => res.json(await debtsSourceInfo(req.user))));
 r.put("/settings", ah(async (req, res) => {
   const s = await saveSettings(req.user, req.body || {});
   await audit(req, "settings.save", null, req.body);

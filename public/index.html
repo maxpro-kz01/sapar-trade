@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="ef79f573d521" />
+<meta name="st-build" content="ec906927ecd9" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -8055,6 +8055,98 @@ function shiftWhatsAppUrl(phone, text) {
   const body = CUR_LANG === "kk" ? text.split("\n").map(trKK).join("\n") : text;
   return "https://wa.me/" + String(phone || "").replace(/\D/g, "") + "?text=" + encodeURIComponent(body);
 }
+function AdminDebtsSource({
+  session,
+  authLost,
+  showToast
+}) {
+  const r = useLive(session, "/api/settings/debts", authLost);
+  const [showMiss, setShowMiss] = useState(false);
+  if (!r.data) return React.createElement(MgCard, null, React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload
+  })));
+  const d = r.data;
+  const canEdit = liveCan(session, "settings");
+  const setSource = async src => {
+    if (src === d.source) return;
+    try {
+      await stApi("/api/settings", {
+        method: "PUT",
+        token: session.token,
+        body: {
+          debtsSource: src
+        }
+      });
+      showToast(src === "buh" ? "Долги — из Бухгалтерии" : "Долги — из УТП");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  const opt = (id, label) => React.createElement("button", {
+    key: id,
+    disabled: !canEdit,
+    onClick: () => setSource(id),
+    "aria-pressed": d.source === id,
+    className: "flex-1 rounded-xl",
+    style: {
+      padding: "8px 10px",
+      fontSize: 12.5,
+      fontWeight: 800,
+      background: d.source === id ? "var(--navy)" : "transparent",
+      color: d.source === id ? "#fff" : "inherit",
+      border: "1px solid " + (d.source === id ? "transparent" : "var(--line)")
+    }
+  }, label);
+  const waiting = d.source === "buh" && d.active !== "buh";
+  return React.createElement(MgCard, null, React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, "\u041E\u0442\u043A\u0443\u0434\u0430 \u0431\u0440\u0430\u0442\u044C \u0434\u043E\u043B\u0433\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      lineHeight: 1.45,
+      marginBottom: 8
+    }
+  }, "\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440 \u0437\u0430\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u0434\u043E\u043B\u0433\u0438 \u0432 1\u0421:\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438 (\u0441\u0447\u0451\u0442 1274). \u0412 \u0423\u0422\u041F \u043E\u043F\u043B\u0430\u0442\u044B \u043F\u043E\u0447\u0442\u0438 \u043D\u0435 \u0432\u043D\u043E\u0441\u044F\u0442\u0441\u044F, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u0442\u0430\u043C \u0434\u043E\u043B\u0433\u0438 \u0437\u0430\u0432\u044B\u0448\u0435\u043D\u044B."), React.createElement("div", {
+    className: "flex gap-2"
+  }, opt("buh", "1С:Бухгалтерия (1274)"), opt("utp", "УТП")), waiting && React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "#B7791F",
+      marginTop: 8,
+      lineHeight: 1.45
+    }
+  }, "\u0414\u0430\u043D\u043D\u044B\u0445 \u0438\u0437 \u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438 \u0435\u0449\u0451 \u043D\u0435\u0442 \u2014 \u043F\u043E\u043A\u0430 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0434\u043E\u043B\u0433\u0438 \u0438\u0437 \u0423\u0422\u041F. \u041D\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0435 1\u0421 \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0435 ", React.createElement("b", null, "8_buhgalteria.bat"), "."), d.active === "buh" && React.createElement("div", {
+    style: {
+      fontSize: 12,
+      marginTop: 8,
+      lineHeight: 1.6
+    }
+  }, React.createElement("div", null, "\u0414\u043E\u043B\u0433 \u043F\u043E \u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438: ", React.createElement("b", null, stMoney(d.buhTotal)), " \xB7 \u043D\u0430 \u0441\u0430\u0439\u0442\u0435: ", React.createElement("b", null, stMoney(d.openTotal))), React.createElement("div", null, "\u041E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u043E: ", stFmtTime(d.buhLast), " \xB7 \u0441\u043E\u043F\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432: ", d.matched, d.unmatched ? `, не найдено в УТП: ${d.unmatched}` : ""), d.unmatchedTop.length > 0 && React.createElement("button", {
+    className: "underline",
+    style: {
+      fontSize: 12,
+      color: "var(--muted)"
+    },
+    onClick: () => setShowMiss(v => !v)
+  }, showMiss ? "Скрыть" : "Показать", " \u0434\u043E\u043B\u0436\u043D\u0438\u043A\u043E\u0432, \u043A\u043E\u0442\u043E\u0440\u044B\u0445 \u043D\u0435\u0442 \u0432 \u0423\u0422\u041F"), showMiss && d.unmatchedTop.map(x => React.createElement("div", {
+    key: x.code,
+    className: "flex justify-between gap-2",
+    style: {
+      fontSize: 11.5,
+      borderTop: "1px solid var(--line)",
+      padding: "3px 0"
+    }
+  }, React.createElement("span", {
+    className: "min-w-0 truncate"
+  }, x.name || x.code), React.createElement("b", {
+    className: "shrink-0"
+  }, stMoney(x.amount))))));
+}
 function AdminShiftLive({
   session,
   authLost,
@@ -8283,7 +8375,11 @@ function AdminSettingsLive({
       background: "#fff",
       transition: "left .15s"
     }
-  })))));
+  })))), React.createElement(AdminDebtsSource, {
+    session: session,
+    authLost: authLost,
+    showToast: showToast
+  }));
 }
 const ADMIN_TABS = {
   shift: ["power", "Смена"],

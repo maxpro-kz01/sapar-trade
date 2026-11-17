@@ -100,6 +100,7 @@ function AdminSettingsLive({ session, authLost, showToast }) {
           </button>
         </div>
       </MgCard>
+      <AdminDebtsSource session={session} authLost={authLost} showToast={showToast} />
     </>
   );
 }

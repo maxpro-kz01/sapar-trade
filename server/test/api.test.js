@@ -171,7 +171,7 @@ test("бухгалтер: продажи и долги без маржи, ста
   assert.ok(!/"(cost|gross|marginPct)"/.test(r.raw));
   const s = await api("GET", "/api/sync/status", { token: tokens.buh });
   assert.equal(s.status, 200);
-  assert.equal(s.body.items.length, 12);
+  assert.equal(s.body.items.length, 13, "12 выгрузок УТП + долги Бухгалтерии");
   assert.equal(s.body.stale, false);
 });
 
