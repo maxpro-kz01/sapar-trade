@@ -47,6 +47,6 @@
  "10_fleet/gps_tracker.js",
  "10_fleet/driver_app.jsx",
  "00_core/nav_history.js",
- "00_core/version_check.jsx",
+ "00_core/version_check.jsx", "00_core/pwa_install.jsx",
  "00_core/root_app.jsx"
 ]

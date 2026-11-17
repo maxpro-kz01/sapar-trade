@@ -51,6 +51,7 @@ function StaffGate({ onCancel, onPick }) {
           </div>
           <Ico name="arrow-left" size={16} color="var(--navy)" style={{ transform: "rotate(180deg)" }} />
         </button>
+        <InstallApp />
       </div>
     </div>
   );

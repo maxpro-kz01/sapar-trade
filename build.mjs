@@ -9,7 +9,7 @@
 //
 // Запуск: npm ci && node build.mjs
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,14 @@ const styles = ["styles/base.css", "styles/responsive.css"]
 // Адрес API-сервера рабочего режима (можно переопределить: ST_API_URL=http://127.0.0.1:3999 node build.mjs)
 const apiUrl = process.env.ST_API_URL || "https://sapar-trade-api.onrender.com";
 
+// React кладём на свой сайт: /vendor/<версия>/ (из node_modules; версия — в пути, значит кэш никогда не устаревает)
+const reactV = JSON.parse(read("node_modules/react/package.json")).version;
+mkdirSync(join(root, "public/vendor", reactV), { recursive: true });
+copyFileSync(join(root, "node_modules/react/umd/react.production.min.js"), join(root, "public/vendor", reactV, "react.production.min.js"));
+copyFileSync(join(root, "node_modules/react-dom/umd/react-dom.production.min.js"), join(root, "public/vendor", reactV, "react-dom.production.min.js"));
+
 const page = read("src/index.template.html")
+  .replaceAll("__REACT_V__", reactV)
   .replace("__ST_API__", () => apiUrl)
   .replace("/*__STYLES__*/", () => styles)
   .replace("/*__APP__*/", () => code.replace(/<\/script/gi, "<\\/script"));

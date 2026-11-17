@@ -6,12 +6,14 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="4bb4b3b94321" />
+<meta name="st-build" content="85eec8f008f8" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Sapar Trade" />
-<link rel="icon" href="data:,">
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" type="image/png" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <style>
 /* ---------- Minimal reset (Tailwind-preflight-like) ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -268,9 +270,9 @@ ul, ol { list-style: none; margin: 0; padding: 0; }
 <body>
 <div id="root"></div>
 
-<!-- React 18 (UMD) с cdnjs. JSX уже скомпилирован при сборке (build.mjs), Babel в браузере не нужен. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" crossorigin></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<!-- React 18 (UMD) со своего же сайта (/vendor, копируется при сборке): работает без cdnjs и без связи после установки. JSX скомпилирован при сборке, Babel в браузере не нужен. -->
+<script src="/vendor/18.3.1/react.production.min.js"></script>
+<script src="/vendor/18.3.1/react-dom.production.min.js"></script>
 <script>
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
@@ -4455,7 +4457,7 @@ function StaffGate({
     style: {
       transform: "rotate(180deg)"
     }
-  }))));
+  })), React.createElement(InstallApp, null)));
 }
 const ST_API = ((document.querySelector('meta[name="st-api"]') || {}).content || "").replace(/\/$/, "");
 const stAuth = {
@@ -5471,6 +5473,8 @@ function LivePasswordModal({
     onClick: save
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"), React.createElement(LiveDevices, {
     session: session
+  }), React.createElement(InstallApp, {
+    compact: true
   }));
 }
 const MG_TABS = {
@@ -9832,6 +9836,96 @@ function NewVersionBar() {
       fontSize: 13
     }
   }, "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C"));
+}
+let stInstallEvent = null;
+const stInstallListeners = new Set();
+const stNotifyInstall = () => stInstallListeners.forEach(f => f());
+const stIsStandalone = () => window.matchMedia && window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault();
+    stInstallEvent = e;
+    stNotifyInstall();
+  });
+  window.addEventListener("appinstalled", () => {
+    stInstallEvent = null;
+    stNotifyInstall();
+  });
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "127.0.0.1" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
+}
+function useInstallApp() {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump(x => x + 1);
+    stInstallListeners.add(f);
+    return () => stInstallListeners.delete(f);
+  }, []);
+  const ua = navigator.userAgent || "";
+  const ios = /iPhone|iPad|iPod/.test(ua) || /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  return {
+    installed: stIsStandalone(),
+    canPrompt: !!stInstallEvent,
+    ios,
+    install: async () => {
+      if (!stInstallEvent) return;
+      const ev = stInstallEvent;
+      stInstallEvent = null;
+      stNotifyInstall();
+      ev.prompt();
+      try {
+        await ev.userChoice;
+      } catch (e) {}
+    }
+  };
+}
+function InstallApp({
+  compact
+}) {
+  const a = useInstallApp();
+  if (a.installed) return null;
+  const box = {
+    border: "1.5px dashed var(--line)",
+    borderRadius: 16,
+    padding: compact ? "10px 12px" : "12px 14px",
+    background: "#fff",
+    marginTop: 16
+  };
+  if (a.canPrompt) {
+    return React.createElement("div", {
+      style: box,
+      "data-testid": "install-app"
+    }, React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "var(--muted)",
+        marginBottom: 8
+      }
+    }, "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u0435 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0443 \u043D\u0430 \u044D\u0442\u043E\u0442 ", a.ios ? "телефон" : "телефон или компьютер", ": \u0437\u043D\u0430\u0447\u043E\u043A \u043D\u0430 \u044D\u043A\u0440\u0430\u043D\u0435, \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0441\u0440\u0430\u0437\u0443, \u0432\u0445\u043E\u0434 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F."), React.createElement(PrimaryButton, {
+      full: true,
+      onClick: a.install
+    }, "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435"));
+  }
+  return React.createElement("div", {
+    style: box,
+    "data-testid": "install-app"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "var(--ink)",
+      marginBottom: 3
+    }
+  }, "\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435"), React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      lineHeight: 1.5
+    }
+  }, a.ios ? "iPhone: откройте эту страницу в Safari, нажмите «Поделиться» (квадрат со стрелкой) → «На экран «Домой»»." : "Откройте меню браузера (три точки) → «Установить приложение» или «Добавить на главный экран». На компьютере в Chrome и Edge значок установки — справа в адресной строке."));
 }
 function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());

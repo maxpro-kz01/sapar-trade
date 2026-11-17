@@ -163,6 +163,7 @@ function LivePasswordModal({ session, onClose, onChanged }) {
       <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 10 }}>После смены пароля вход на других устройствах завершится.</p>
       <PrimaryButton full disabled={!f.oldPassword || !f.newPassword} onClick={save}>Сохранить</PrimaryButton>
       <LiveDevices session={session} />
+      <InstallApp compact />
     </Modal>
   );
 }
