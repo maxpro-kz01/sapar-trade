@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="e0de5a3006ab" />
+<meta name="st-build" content="4bb4b3b94321" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -4458,18 +4458,41 @@ function StaffGate({
   }))));
 }
 const ST_API = ((document.querySelector('meta[name="st-api"]') || {}).content || "").replace(/\/$/, "");
+const stAuth = {
+  token: null,
+  refreshToken: null,
+  pending: null
+};
+let stMem = null;
 const stSession = {
   get() {
+    let v = stMem;
     try {
-      return JSON.parse(sessionStorage.getItem("st.session") || "null");
-    } catch (e) {
-      return null;
+      v = JSON.parse(localStorage.getItem("st.session") || "null") || stMem;
+    } catch (e) {}
+    if (v) {
+      stAuth.token = v.token || null;
+      stAuth.refreshToken = v.refreshToken || null;
     }
+    return v;
   },
   set(v) {
+    stMem = v || null;
+    stAuth.token = v ? v.token || null : null;
+    stAuth.refreshToken = v ? v.refreshToken || null : null;
     try {
-      v ? sessionStorage.setItem("st.session", JSON.stringify(v)) : sessionStorage.removeItem("st.session");
+      v ? localStorage.setItem("st.session", JSON.stringify(v)) : localStorage.removeItem("st.session");
     } catch (e) {}
+    try {
+      sessionStorage.removeItem("st.session");
+    } catch (e) {}
+  }
+};
+const stJwtExp = t => {
+  try {
+    return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000;
+  } catch (e) {
+    return 0;
   }
 };
 class StApiError extends Error {
@@ -4478,7 +4501,7 @@ class StApiError extends Error {
     this.status = status;
   }
 }
-async function stApi(path, {
+async function stFetch(path, {
   method = "GET",
   body,
   token,
@@ -4510,6 +4533,66 @@ async function stApi(path, {
   } catch (e) {}
   if (!res.ok) throw new StApiError(res.status, data && data.error || "Ошибка сервера (" + res.status + ")");
   return data;
+}
+function stRefresh() {
+  if (!stAuth.refreshToken) return Promise.reject(new StApiError(401, "Сессия завершена, войдите снова"));
+  if (!stAuth.pending) {
+    const rt = stAuth.refreshToken;
+    stAuth.pending = stFetch("/api/auth/refresh", {
+      method: "POST",
+      body: {
+        refreshToken: rt
+      }
+    }).then(r => {
+      const s = stSession.get();
+      if (s && s.refreshToken === rt) stSession.set({
+        ...s,
+        token: r.token,
+        user: r.user,
+        perms: r.perms
+      });
+    }).finally(() => {
+      stAuth.pending = null;
+    });
+  }
+  return stAuth.pending;
+}
+async function stApi(path, opts = {}) {
+  if (!opts.token || !stAuth.refreshToken) return stFetch(path, opts);
+  if (!stAuth.token || stJwtExp(stAuth.token) - Date.now() < 60000) {
+    try {
+      await stRefresh();
+    } catch (e) {
+      if (e.status === 401) throw e;
+    }
+  }
+  try {
+    return await stFetch(path, {
+      ...opts,
+      token: stAuth.token || opts.token
+    });
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    await stRefresh();
+    return stFetch(path, {
+      ...opts,
+      token: stAuth.token
+    });
+  }
+}
+function stLogout() {
+  const rt = stAuth.refreshToken;
+  stSession.set(null);
+  if (rt) fetch(ST_API + "/api/auth/logout", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      refreshToken: rt
+    }),
+    keepalive: true
+  }).catch(() => {});
 }
 function useLive(session, path, onAuthLost, refreshMs) {
   const [state, setState] = useState({
@@ -4891,6 +4974,7 @@ function LiveLogin({
       }
       onSuccess({
         token: r.token,
+        refreshToken: r.refreshToken,
         user: r.user,
         perms: r.perms,
         mode
@@ -5077,6 +5161,17 @@ function LiveUsers({
       setErr(e.message);
     }
   };
+  const kick = async u => {
+    try {
+      await stApi("/api/users/" + u.id + "/logout", {
+        method: "POST",
+        token: session.token
+      });
+      showToast("Вышел на всех устройствах");
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
   const toggle = async u => {
     try {
       await stApi("/api/users/" + u.id, {
@@ -5131,6 +5226,9 @@ function LiveUsers({
       color: "var(--muted)"
     }
   }, LIVE_ROLES[u.role] || u.role, u.manager1c ? " · 1С: " + u.manager1c : "", u.lastLoginAt ? " · вход " + stFmtTime(u.lastLoginAt) : "")), u.id !== session.user.id && React.createElement(GhostButton, {
+    small: true,
+    onClick: () => kick(u)
+  }, "\u0412\u044B\u0439\u0442\u0438 \u0432\u0435\u0437\u0434\u0435"), u.id !== session.user.id && React.createElement(GhostButton, {
     small: true,
     onClick: () => toggle(u)
   }, u.isActive ? "Закрыть доступ" : "Открыть")))), form && React.createElement(Modal, {
@@ -5246,6 +5344,53 @@ function LiveAgentPicker({
     onClick: () => pick(a.name)
   }, a.name, " \xB7 ", a.clients)));
 }
+function LiveDevices({
+  session
+}) {
+  const r = useLive(session, "/api/auth/sessions");
+  const out = async id => {
+    try {
+      await stApi("/api/auth/sessions/" + id, {
+        method: "DELETE",
+        token: session.token
+      });
+      r.reload();
+    } catch (e) {}
+  };
+  if (!r.data) return null;
+  return React.createElement("div", {
+    className: "mt-5"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "var(--ink)",
+      marginBottom: 6
+    }
+  }, "\u041C\u043E\u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430"), r.data.map(d => React.createElement("div", {
+    key: d.id,
+    className: "flex items-center gap-2 py-2",
+    style: {
+      borderTop: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      fontWeight: 600,
+      color: "var(--ink)"
+    }
+  }, d.device, d.current ? " · это устройство" : ""), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, "\u0437\u0430\u0445\u043E\u0434\u0438\u043B\u0438 ", stFmtTime(d.lastUsedAt))), !d.current && React.createElement(GhostButton, {
+    small: true,
+    onClick: () => out(d.id)
+  }, "\u0412\u044B\u0439\u0442\u0438"))));
+}
 function LivePasswordModal({
   session,
   onClose,
@@ -5271,13 +5416,18 @@ function LivePasswordModal({
           newPassword: f.newPassword
         }
       });
+      stSession.set({
+        ...session,
+        token: r.token,
+        refreshToken: r.refreshToken
+      });
       onChanged(r.token);
     } catch (e) {
       setErr(e.message);
     }
   };
   return React.createElement(Modal, {
-    title: "\u0421\u043C\u0435\u043D\u0430 \u043F\u0430\u0440\u043E\u043B\u044F",
+    title: "\u041F\u0430\u0440\u043E\u043B\u044C \u0438 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430",
     onClose: onClose
   }, React.createElement(Field, {
     label: "\u0422\u0435\u043A\u0443\u0449\u0438\u0439 \u043F\u0430\u0440\u043E\u043B\u044C",
@@ -5319,7 +5469,9 @@ function LivePasswordModal({
     full: true,
     disabled: !f.oldPassword || !f.newPassword,
     onClick: save
-  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"));
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"), React.createElement(LiveDevices, {
+    session: session
+  }));
 }
 const MG_TABS = {
   home: ["home", "Главная"],
@@ -9820,6 +9972,7 @@ function App() {
     }
   }), view === "live" && liveSession && (() => {
     const exit = msg => {
+      stLogout();
       const next = {
         view: msg ? "liveLogin" : HOME,
         mode: liveSession.mode || "mgmt"

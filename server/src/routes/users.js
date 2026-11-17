@@ -6,6 +6,7 @@ import { createUser, setPassword, publicUser } from "../services/users.js";
 import { audit } from "../services/audit.js";
 import { q } from "../db/pool.js";
 import { agentNames } from "../services/client_agents.js";
+import { revokeAll } from "../services/sessions.js";
 
 const r = Router();
 r.use(requireAuth, requirePerm("users"));
@@ -48,8 +49,20 @@ r.patch("/:id", ah(async (req, res) => {
      WHERE id = $1 RETURNING *`,
     [u.id, b.name ?? null, b.role ?? null, b.manager1c !== undefined, b.manager1c || null, b.isActive ?? null]
   );
+  if (b.isActive === false || b.role !== undefined || b.password) await revokeAll(u.id); // закрыт доступ, сменена роль или пароль — все входы закрываем
   await audit(req, "user.update", u.login, { ...b, password: b.password ? "***" : undefined });
   res.json(publicUser(upd[0]));
+}));
+
+// «Выйти на всех устройствах» за сотрудника: потерял телефон, уволился
+r.post("/:id/logout", ah(async (req, res) => {
+  const { rows } = await q("SELECT * FROM users WHERE id = $1", [req.params.id]);
+  const u = rows[0];
+  if (!u || !allowed(req.user, u.role)) return res.status(404).json({ error: "Не найден" });
+  await q("UPDATE users SET token_version = token_version + 1 WHERE id = $1", [u.id]);
+  await revokeAll(u.id);
+  await audit(req, "user.logout-all", u.login);
+  res.json({ ok: true });
 }));
 
 export default r;

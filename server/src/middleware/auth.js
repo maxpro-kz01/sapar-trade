@@ -4,9 +4,10 @@ import crypto from "node:crypto";
 import { config } from "../config.js";
 import { q } from "../db/pool.js";
 import { can } from "../services/rbac.js";
+import { sessionAlive } from "../services/sessions.js";
 
-export function signToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role, tv: user.token_version }, config.jwtSecret, { expiresIn: config.jwtTtl });
+export function signToken(user, sid) {
+  return jwt.sign({ sub: user.id, role: user.role, tv: user.token_version, ...(sid ? { sid } : {}) }, config.jwtSecret, { expiresIn: config.jwtTtl });
 }
 
 export async function requireAuth(req, res, next) {
@@ -17,7 +18,10 @@ export async function requireAuth(req, res, next) {
   const { rows } = await q("SELECT * FROM users WHERE id = $1", [payload.sub]);
   const u = rows[0];
   if (!u || !u.is_active || u.token_version !== payload.tv) return res.status(401).json({ error: "Сессия завершена, войдите снова" });
+  // вход по устройству: закрыли сессию (выход, «Мои устройства», увольнение) — доступ пропадает сразу
+  if (payload.sid && !(await sessionAlive(payload.sid, u.id))) return res.status(401).json({ error: "Вход на этом устройстве закрыт, войдите снова" });
   req.user = u;
+  req.sid = payload.sid || 0;
   next();
 }
 

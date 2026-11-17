@@ -7,7 +7,7 @@ function App() {
   // view: "client" (customer-facing app) | "staffChoice" (hidden role picker, reached via
   // double‑tap on the logo) | "adminLogin" / "admin" (staff dashboard, admin/admin)
   // | "agentLogin" / "agent" (sales-rep dashboard, credentials issued by the admin)
-  // Рабочий режим: сессия живёт до закрытия вкладки; ссылка …/#work открывает рабочий вход сразу
+  // Рабочий режим: вход хранится на устройстве, пока человек сам не выйдет; ссылка …/#work открывает рабочий вход сразу
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = (v) => { stSession.set(v); setLiveSessionState(v); };
   const [liveNotice, setLiveNotice] = useState("");
@@ -71,6 +71,7 @@ function App() {
         {view === "live" && liveSession && (() => {
           // выход: прошлые экраны сотрудника из истории забываем, «Назад» в систему не вернёт
           const exit = (msg) => {
+            stLogout();
             const next = { view: msg ? "liveLogin" : HOME, mode: liveSession.mode || "mgmt" };
             setLiveSession(null); setLiveNotice(msg || ""); navReset({ root: next }); replaceRoot(next);
           };

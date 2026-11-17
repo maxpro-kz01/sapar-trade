@@ -22,7 +22,7 @@ function LiveLogin({ onCancel, onSuccess, notice, mode = "mgmt" }) {
     try {
       const r = await stApi("/api/auth/login", { method: "POST", body: { login: login.trim(), password } });
       if (!M.allow(r.perms || [])) { setErr(`Для вашей роли раздел «${M.title}» недоступен. Войдите через «Система управления».`); return; }
-      onSuccess({ token: r.token, user: r.user, perms: r.perms, mode });
+      onSuccess({ token: r.token, refreshToken: r.refreshToken, user: r.user, perms: r.perms, mode });
     } catch (e) {
       setErr(e.message);
     } finally {

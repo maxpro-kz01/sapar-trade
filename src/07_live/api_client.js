@@ -1,19 +1,34 @@
 // Sapar Trade — рабочая версия. Модуль: связь с сервером (API), сессия, периоды по времени Кызылорды
-// Адрес сервера — <meta name="st-api"> в index.template.html. Токен хранится только до закрытия вкладки (sessionStorage).
+// Адрес сервера — <meta name="st-api"> в index.template.html.
+// Вход долгий: токен входа (90 дней) лежит на устройстве в localStorage, короткий токен доступа (1 час) программа
+// обновляет сама, человек выходит только кнопкой «Выйти» (или если доступ закрыли на сервере).
 
 const ST_API = ((document.querySelector('meta[name="st-api"]') || {}).content || "").replace(/\/$/, "");
 
+const stAuth = { token: null, refreshToken: null, pending: null }; // текущие токены в памяти (запросы берут отсюда)
+let stMem = null; // копия на случай, когда браузер не даёт писать в localStorage
 const stSession = {
-  get() { try { return JSON.parse(sessionStorage.getItem("st.session") || "null"); } catch (e) { return null; } },
-  set(v) { try { v ? sessionStorage.setItem("st.session", JSON.stringify(v)) : sessionStorage.removeItem("st.session"); } catch (e) { /* приватный режим */ } },
+  get() {
+    let v = stMem;
+    try { v = JSON.parse(localStorage.getItem("st.session") || "null") || stMem; } catch (e) { /* приватный режим */ }
+    if (v) { stAuth.token = v.token || null; stAuth.refreshToken = v.refreshToken || null; }
+    return v;
+  },
+  set(v) {
+    stMem = v || null;
+    stAuth.token = v ? v.token || null : null; stAuth.refreshToken = v ? v.refreshToken || null : null;
+    try { v ? localStorage.setItem("st.session", JSON.stringify(v)) : localStorage.removeItem("st.session"); } catch (e) { /* приватный режим */ }
+    try { sessionStorage.removeItem("st.session"); } catch (e) { /* старая запись прошлой версии */ }
+  },
 };
+const stJwtExp = (t) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000; } catch (e) { return 0; } };
 
 class StApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-// Запрос к API. Бесплатный сервер «просыпается» до минуты — поэтому большой таймаут.
-async function stApi(path, { method = "GET", body, token, timeoutMs = 75000 } = {}) {
+// Один запрос к API без обновления входа. Бесплатный сервер «просыпается» до минуты — поэтому большой таймаут.
+async function stFetch(path, { method = "GET", body, token, timeoutMs = 75000 } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   let res;
@@ -33,6 +48,41 @@ async function stApi(path, { method = "GET", body, token, timeoutMs = 75000 } = 
   try { data = await res.json(); } catch (e) { /* пустой ответ */ }
   if (!res.ok) throw new StApiError(res.status, (data && data.error) || "Ошибка сервера (" + res.status + ")");
   return data;
+}
+
+// Новый токен доступа по токену входа. Несколько запросов одновременно ждут один общий ответ.
+function stRefresh() {
+  if (!stAuth.refreshToken) return Promise.reject(new StApiError(401, "Сессия завершена, войдите снова"));
+  if (!stAuth.pending) {
+    const rt = stAuth.refreshToken;
+    stAuth.pending = stFetch("/api/auth/refresh", { method: "POST", body: { refreshToken: rt } })
+      .then((r) => { const s = stSession.get(); if (s && s.refreshToken === rt) stSession.set({ ...s, token: r.token, user: r.user, perms: r.perms }); })
+      .finally(() => { stAuth.pending = null; });
+  }
+  return stAuth.pending;
+}
+
+// Запрос к API. Токен доступа истёк (1 час) — тихо обновляем по токену входа и повторяем запрос.
+// Выкинет наружу 401 только если вход закрыт на сервере (выход с другого устройства, доступ закрыли, 90 дней без захода).
+async function stApi(path, opts = {}) {
+  if (!opts.token || !stAuth.refreshToken) return stFetch(path, opts);
+  if (!stAuth.token || stJwtExp(stAuth.token) - Date.now() < 60000) {
+    try { await stRefresh(); } catch (e) { if (e.status === 401) throw e; /* нет связи — пробуем со старым токеном */ }
+  }
+  try {
+    return await stFetch(path, { ...opts, token: stAuth.token || opts.token });
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    await stRefresh(); // 401 здесь — вход закрыт, пойдёт наверх как выход
+    return stFetch(path, { ...opts, token: stAuth.token });
+  }
+}
+
+// Выход на этом устройстве: токен входа гасим на сервере, с устройства стираем
+function stLogout() {
+  const rt = stAuth.refreshToken;
+  stSession.set(null);
+  if (rt) fetch(ST_API + "/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: rt }), keepalive: true }).catch(() => {});
 }
 
 // Загрузка данных экрана: { data, error, loading, reload }. При 401 — выход из сессии.

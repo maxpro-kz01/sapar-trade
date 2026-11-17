@@ -49,6 +49,9 @@ function LiveUsers({ session, authLost, showToast }) {
       setForm(null); showToast("Сотрудник создан"); r.reload();
     } catch (e) { setErr(e.message); }
   };
+  const kick = async (u) => {
+    try { await stApi("/api/users/" + u.id + "/logout", { method: "POST", token: session.token }); showToast("Вышел на всех устройствах"); } catch (e) { showToast(e.message); }
+  };
   const toggle = async (u) => {
     try {
       await stApi("/api/users/" + u.id, { method: "PATCH", token: session.token, body: { isActive: !u.isActive } });
@@ -68,6 +71,7 @@ function LiveUsers({ session, authLost, showToast }) {
                 <p style={{ fontSize: 13, fontWeight: 700, color: u.isActive ? "var(--ink)" : "var(--muted)" }}>{u.name} <span className="font-mono-kz" style={{ fontSize: 11, color: "var(--muted)" }}>{u.login}</span></p>
                 <p style={{ fontSize: 11, color: "var(--muted)" }}>{LIVE_ROLES[u.role] || u.role}{u.manager1c ? " · 1С: " + u.manager1c : ""}{u.lastLoginAt ? " · вход " + stFmtTime(u.lastLoginAt) : ""}</p>
               </div>
+              {u.id !== session.user.id && <GhostButton small onClick={() => kick(u)}>Выйти везде</GhostButton>}
               {u.id !== session.user.id && <GhostButton small onClick={() => toggle(u)}>{u.isActive ? "Закрыть доступ" : "Открыть"}</GhostButton>}
             </div>
           ))}
@@ -118,6 +122,27 @@ function LiveAgentPicker({ session, value, multi, onPick }) {
   );
 }
 
+// «Мои устройства»: где выполнен вход; потерянный телефон можно отключить отсюда
+function LiveDevices({ session }) {
+  const r = useLive(session, "/api/auth/sessions");
+  const out = async (id) => { try { await stApi("/api/auth/sessions/" + id, { method: "DELETE", token: session.token }); r.reload(); } catch (e) { /* список обновится */ } };
+  if (!r.data) return null;
+  return (
+    <div className="mt-5">
+      <p style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>Мои устройства</p>
+      {r.data.map((d) => (
+        <div key={d.id} className="flex items-center gap-2 py-2" style={{ borderTop: "1px solid var(--line)" }}>
+          <div className="flex-1 min-w-0">
+            <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>{d.device}{d.current ? " · это устройство" : ""}</p>
+            <p style={{ fontSize: 11, color: "var(--muted)" }}>заходили {stFmtTime(d.lastUsedAt)}</p>
+          </div>
+          {!d.current && <GhostButton small onClick={() => out(d.id)}>Выйти</GhostButton>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LivePasswordModal({ session, onClose, onChanged }) {
   const [f, setF] = useState({ oldPassword: "", newPassword: "", repeat: "" });
   const [err, setErr] = useState("");
@@ -125,17 +150,19 @@ function LivePasswordModal({ session, onClose, onChanged }) {
     if (f.newPassword !== f.repeat) { setErr("Пароли не совпадают"); return; }
     try {
       const r = await stApi("/api/auth/password", { method: "POST", token: session.token, body: { oldPassword: f.oldPassword, newPassword: f.newPassword } });
+      stSession.set({ ...session, token: r.token, refreshToken: r.refreshToken }); // токены нового входа сохраняем сразу
       onChanged(r.token);
     } catch (e) { setErr(e.message); }
   };
   return (
-    <Modal title="Смена пароля" onClose={onClose}>
+    <Modal title="Пароль и устройства" onClose={onClose}>
       <Field label="Текущий пароль" type="password" value={f.oldPassword} onChange={(e) => setF({ ...f, oldPassword: e.target.value })} />
       <Field label="Новый пароль" type="password" value={f.newPassword} onChange={(e) => setF({ ...f, newPassword: e.target.value })} />
       <Field label="Повторите новый пароль" type="password" value={f.repeat} onChange={(e) => setF({ ...f, repeat: e.target.value })} />
       {err && <p style={{ fontSize: 12, color: "var(--red)", marginBottom: 10 }}>{err}</p>}
       <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 10 }}>После смены пароля вход на других устройствах завершится.</p>
       <PrimaryButton full disabled={!f.oldPassword || !f.newPassword} onClick={save}>Сохранить</PrimaryButton>
+      <LiveDevices session={session} />
     </Modal>
   );
 }

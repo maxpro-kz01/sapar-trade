@@ -15,7 +15,8 @@ export const config = {
   databaseUrl: required("DATABASE_URL"),
   databaseSsl: env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : false,
   jwtSecret: required("JWT_SECRET", 32),
-  jwtTtl: env.JWT_TTL || "12h",
+  jwtTtl: env.JWT_TTL || "1h",                      // токен доступа короткий; программа сама обновляет его по токену входа
+  sessionDays: Number(env.SESSION_DAYS || 90),      // токен входа продлевается при каждом обновлении: не заходил 90 дней — войти заново
   agentKey: required("AGENT_KEY", 24),
   // Откуда разрешены запросы браузера (сайт). Несколько адресов — через запятую.
   corsOrigins: (env.CORS_ORIGINS || "https://sapar-trade.onrender.com").split(",").map((s) => s.trim()).filter(Boolean),
