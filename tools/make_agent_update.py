@@ -19,6 +19,12 @@ with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     for f in sorted(os.listdir(qdir)):
         if f.endswith(".1c"):
             z.write(os.path.join(qdir, f), "queries/" + f)
+# Защита: bat/vbs с переводами строк LF ломают cmd.exe ("'d' is not recognized").
+for _n in FILES:
+    if _n.endswith((".bat", ".vbs")):
+        _b = open(os.path.join(ROOT, _n), "rb").read()
+        if b"\n" in _b.replace(b"\r\n", b""):
+            sys.exit(f"ОШИБКА: {_n} содержит переводы строк LF, нужен CRLF")
 payload = "\r\n".join(textwrap.wrap(base64.b64encode(buf.getvalue()).decode(), 76))
 
 ps = ("$ErrorActionPreference='Stop'; $t=[IO.File]::ReadAllText('%~f0'); $i=$t.LastIndexOf('::DATA::'); "
