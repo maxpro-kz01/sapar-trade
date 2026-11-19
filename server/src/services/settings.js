@@ -5,7 +5,7 @@ import { HttpError } from "../lib/http.js";
 
 // onecOrders — агент создаёт в 1С «Реализацию» (непроведённую) по заказам из приложения (ТЗ финансов v1.2, часть D)
 // debtsSource — откуда брать долги клиентов: 'buh' — 1С:Бухгалтерия, счёт 1274 (ТЗ TZ_DEBTS_BUH), 'utp' — УТП
-export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false, debtsSource: "buh" };
+export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false, debtsSource: "buh", shopMaxOrder: 3000000, shopConfirmCode: false };
 
 export async function getSettings() {
   const { rows } = await q("SELECT key, value FROM settings");
@@ -29,6 +29,15 @@ export async function saveSettings(user, b) {
   if (b?.debtsSource !== undefined) {
     if (b.debtsSource !== "buh" && b.debtsSource !== "utp") throw new HttpError(400, "debtsSource: buh или utp");
     saved.debtsSource = b.debtsSource;
+  }
+  if (b?.shopMaxOrder !== undefined) {
+    const n = Number(b.shopMaxOrder);
+    if (!Number.isFinite(n) || n < 0 || n > 1e10) throw new HttpError(400, "shopMaxOrder: число от 0 (0 — без ограничения)");
+    saved.shopMaxOrder = Math.round(n);
+  }
+  if (b?.shopConfirmCode !== undefined) {
+    if (typeof b.shopConfirmCode !== "boolean") throw new HttpError(400, "shopConfirmCode: да или нет");
+    saved.shopConfirmCode = b.shopConfirmCode;
   }
   for (const [k, v] of Object.entries(saved))
     await q(`INSERT INTO settings(key, value, updated_by) VALUES ($1,$2,$3)

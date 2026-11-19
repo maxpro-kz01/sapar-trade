@@ -58,6 +58,8 @@ function OrdersBoard({ session, authLost, showToast, defaultFilter = "new", titl
                   </div>
                 </div>
                 <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
+                  {o.source === "shop" && <Badge bg="#EEF0FF" fg="var(--navy)">Магазин · {SHOP_PAY[o.payment] || o.payment}</Badge>}
+                  {o.source === "shop" && String(o.client_code).startsWith("NEW-") && <Badge bg="#FFF6DE" fg="#8A5A00">нет в 1С</Badge>}
                   <Order1C o={o} />
                   <span style={{ fontSize: 11, color: "var(--muted)" }}>{(o.items || []).length} поз.{o.delivery_date ? " · доставка " + stFmtDate(o.delivery_date) : ""}</span>
                 </div>

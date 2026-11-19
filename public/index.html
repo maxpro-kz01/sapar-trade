@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="bc580a468711" />
+<meta name="st-build" content="cfa0db09a1e0" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -4881,12 +4881,15 @@ function LiveItem({
   sub,
   value,
   valueSub,
-  valueColor
+  valueColor,
+  onClick
 }) {
   return React.createElement("div", {
     className: "flex items-start gap-3 py-2.5",
+    onClick: onClick,
     style: {
-      borderBottom: "1px solid var(--line)"
+      borderBottom: "1px solid var(--line)",
+      cursor: onClick ? "pointer" : undefined
     }
   }, React.createElement("div", {
     className: "flex-1 min-w-0"
@@ -5591,13 +5594,14 @@ const MG_TABS = {
   finance: ["wallet", "Финансы"],
   problems: ["bell", "Проблемы"],
   tasks: ["clipboard", "Задачи"],
+  shops: ["building", "Магазины"],
   ai: ["message-circle", "AI"],
   system: ["settings", "Система"]
 };
 function mgTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
   const role = session.user.role;
-  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross", "cash", "cash.in") && "finance", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
+  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross", "cash", "cash.in") && "finance", can("shops") && "shops", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
 }
 const MG_PERIOD_TABS = ["home", "sales", "team", "clients", "finance"];
 const MgCard = ({
@@ -6303,13 +6307,88 @@ function MgPlanModal({
     disabled: !r.data || !r.data.items.length
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u043B\u0430\u043D")));
 }
+function ClientLimitModal({
+  session,
+  client,
+  onClose,
+  showToast
+}) {
+  const info = useLive(session, "/api/clients/" + encodeURIComponent(client.code) + "/limit");
+  const [val, setVal] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const d = info.data;
+  const shown = val === null ? d ? String(d.limit) : "" : val;
+  const save = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      await stApi("/api/clients/" + encodeURIComponent(client.code) + "/limit", {
+        method: "PUT",
+        token: session.token,
+        body: {
+          limit: Number(String(shown).replace(/\s/g, "").replace(",", ".")) || 0
+        }
+      });
+      showToast && showToast("Лимит сохранён");
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return React.createElement(Modal, {
+    title: "Лимит «в долг»: " + client.name,
+    onClose: onClose
+  }, React.createElement("div", {
+    className: "px-5 pb-6"
+  }, React.createElement(LiveState, {
+    loading: info.loading,
+    error: info.error,
+    onRetry: info.reload
+  }), d && React.createElement(React.Fragment, null, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginBottom: 10
+    }
+  }, "\u041C\u0430\u0433\u0430\u0437\u0438\u043D \u0441\u043C\u043E\u0436\u0435\u0442 \u043E\u0444\u043E\u0440\u043C\u043B\u044F\u0442\u044C \u0437\u0430\u043A\u0430\u0437\u044B \xAB\u0432 \u0434\u043E\u043B\u0433\xBB \u0447\u0435\u0440\u0435\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435, \u043F\u043E\u043A\u0430 \u0434\u043E\u043B\u0433 \u0432 1\u0421 \u0438 \u043D\u0435\u043E\u0442\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u043A\u0430\u0437\u044B \u043D\u0435 \u043F\u0440\u0435\u0432\u044B\u0441\u044F\u0442 \u043B\u0438\u043C\u0438\u0442. 0 \u2014 \xAB\u0432 \u0434\u043E\u043B\u0433\xBB \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u043E."), React.createElement("div", {
+    className: "grid grid-cols-2 gap-2 mb-3"
+  }, React.createElement(MgKpi, {
+    label: "\u0414\u043E\u043B\u0433 \u0432 1\u0421",
+    value: stMoney(d.debt)
+  }), React.createElement(MgKpi, {
+    label: "\u041D\u0435\u043E\u0442\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u044B\u0435 \xAB\u0432 \u0434\u043E\u043B\u0433\xBB",
+    value: stMoney(d.pending)
+  })), React.createElement(Field, {
+    label: "\u041B\u0438\u043C\u0438\u0442, \u20B8",
+    value: shown,
+    onChange: e => setVal(e.target.value),
+    inputMode: "numeric",
+    placeholder: "0"
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      marginBottom: 8
+    }
+  }, err), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy,
+    onClick: save
+  }, busy ? "Сохраняем…" : "Сохранить"))));
+}
 function MgClients({
   session,
   range,
   authLost,
   param,
-  setParam
+  setParam,
+  showToast
 }) {
+  const canLimit = liveCan(session, "credit");
+  const [limitFor, setLimitFor] = useState(null);
   const manager = param && typeof param === "object" ? param.manager : "";
   const [q, setQ] = useState("");
   const [mode, setMode] = useState(param === "sleeping" ? "sleeping" : param === "debtors" ? "debtors" : "all");
@@ -6413,11 +6492,17 @@ function MgClients({
   }, "\u041D\u0430\u0439\u0434\u0435\u043D\u043E: ", stNum(sm.clients), sm.clients > d.items.length ? ", показаны первые " + d.items.length : ""), d.items.map(x => React.createElement(LiveItem, {
     key: x.code,
     title: x.name,
+    onClick: canLimit ? () => setLimitFor(x) : undefined,
     sub: [x.manager, x.phone, x.lastSale ? "посл. покупка " + stFmtDate(x.lastSale) : "покупок нет"].filter(Boolean).join(" · "),
     value: x.debt !== undefined ? stMoney(x.debt) : stMoney(x.revenue),
     valueColor: x.overdue > 0 ? "var(--red)" : undefined,
     valueSub: x.debt !== undefined ? x.overdue > 0 ? "просрочено " + shortMoney(x.overdue) : x.debt > 0 ? "с " + stFmtDate(x.oldestDebt) : x.revenue ? "куплено " + shortMoney(x.revenue) : "долга нет" : null
-  }))));
+  }))), limitFor && React.createElement(ClientLimitModal, {
+    session: session,
+    client: limitFor,
+    showToast: showToast,
+    onClose: () => setLimitFor(null)
+  }));
 }
 function MgStock({
   session,
@@ -8038,7 +8123,7 @@ function MgmtApp({
     key: JSON.stringify(param)
   }, p)), tab === "stock" && React.createElement(MgStock, _extends({
     key: JSON.stringify(param)
-  }, p)), tab === "finance" && React.createElement(MgFinance, p), tab === "problems" && React.createElement(MgProblems, p), tab === "tasks" && React.createElement(MgTasks, p), tab === "ai" && React.createElement(MgAI, p), tab === "system" && React.createElement(MgSystem, p)), React.createElement(AppNav, {
+  }, p)), tab === "finance" && React.createElement(MgFinance, p), tab === "problems" && React.createElement(MgProblems, p), tab === "tasks" && React.createElement(MgTasks, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "ai" && React.createElement(MgAI, p), tab === "system" && React.createElement(MgSystem, p)), React.createElement(AppNav, {
     items: tabs.map(id => ({
       id,
       icon: MG_TABS[id][0],
@@ -8197,7 +8282,13 @@ function OrdersBoard({
       fg: fg
     }, o.status))), React.createElement("div", {
       className: "flex gap-1.5 mt-1.5 flex-wrap items-center"
-    }, React.createElement(Order1C, {
+    }, o.source === "shop" && React.createElement(Badge, {
+      bg: "#EEF0FF",
+      fg: "var(--navy)"
+    }, "\u041C\u0430\u0433\u0430\u0437\u0438\u043D \xB7 ", SHOP_PAY[o.payment] || o.payment), o.source === "shop" && String(o.client_code).startsWith("NEW-") && React.createElement(Badge, {
+      bg: "#FFF6DE",
+      fg: "#8A5A00"
+    }, "\u043D\u0435\u0442 \u0432 1\u0421"), React.createElement(Order1C, {
       o: o
     }), React.createElement("span", {
       style: {
@@ -8647,16 +8738,214 @@ function AdminSettingsLive({
     showToast: showToast
   }));
 }
+function ShopLinkModal({
+  session,
+  shop,
+  onClose,
+  onDone
+}) {
+  const sug = useLive(session, "/api/shops/" + shop.id + "/suggest");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const link = async c => {
+    setBusy(true);
+    setErr("");
+    try {
+      await stApi("/api/shops/" + shop.id + "/link", {
+        method: "POST",
+        token: session.token,
+        body: {
+          clientCode: c
+        }
+      });
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return React.createElement(Modal, {
+    title: "Привязать: " + shop.name,
+    onClose: onClose,
+    wide: true
+  }, React.createElement("div", {
+    className: "px-5 pb-6 overflow-y-auto",
+    style: {
+      maxHeight: "70vh"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginBottom: 8
+    }
+  }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421. \u0417\u0430\u043A\u0430\u0437\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430 \u043F\u0435\u0440\u0435\u0439\u0434\u0443\u0442 \u043D\u0430 \u043D\u0435\u0433\u043E, \u0430 \u0446\u0435\u043D\u044B, \u0434\u043E\u043B\u0433 \u0438 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u0432\u043E\u0437\u044C\u043C\u0443\u0442\u0441\u044F \u0438\u0437 1\u0421."), React.createElement(LiveState, {
+    loading: sug.loading,
+    error: sug.error,
+    onRetry: sug.reload,
+    empty: sug.data && !sug.data.length ? "Похожих клиентов не нашли — введите код ниже" : null
+  }), (sug.data || []).map(c => React.createElement("div", {
+    key: c.code,
+    className: "flex items-center gap-2 py-2.5",
+    style: {
+      borderBottom: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, c.name), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, [c.code, c.phone, c.manager].filter(Boolean).join(" · "))), React.createElement(GhostButton, {
+    small: true,
+    onClick: () => !busy && link(c.code)
+  }, "\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C"))), React.createElement("div", {
+    className: "mt-4"
+  }, React.createElement(Field, {
+    label: "\u0418\u043B\u0438 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 \u043A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421",
+    value: code,
+    onChange: e => setCode(e.target.value),
+    placeholder: "\u041A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430"
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      marginBottom: 8
+    }
+  }, err), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy || !code.trim(),
+    onClick: () => link(code.trim())
+  }, "\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C \u043F\u043E \u043A\u043E\u0434\u0443"))));
+}
+function AdminShopsLive({
+  session,
+  authLost,
+  showToast
+}) {
+  const [filter, setFilter] = useState("new");
+  const r = useLive(session, "/api/shops?" + stQs({
+    filter: filter === "all" ? "" : filter
+  }), authLost);
+  const [linkFor, setLinkFor] = useState(null);
+  const setStatus = async (s, status) => {
+    try {
+      await stApi("/api/shops/" + s.id, {
+        method: "PATCH",
+        token: session.token,
+        body: {
+          status
+        }
+      });
+      showToast(status === "blocked" ? "Магазин заблокирован" : "Магазин разблокирован");
+      r.reload();
+    } catch (e) {
+      showToast(e.message);
+    }
+  };
+  return React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "flex gap-1.5 mb-3 overflow-x-auto pb-1"
+  }, React.createElement(LiveChip, {
+    on: filter === "new",
+    onClick: () => setFilter("new")
+  }, "\u0416\u0434\u0443\u0442 \u043F\u0440\u0438\u0432\u044F\u0437\u043A\u0438"), React.createElement(LiveChip, {
+    on: filter === "all",
+    onClick: () => setFilter("all")
+  }, "\u0412\u0441\u0435"), React.createElement(LiveChip, {
+    on: filter === "blocked",
+    onClick: () => setFilter("blocked")
+  }, "\u0417\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0435")), React.createElement(LiveState, _extends({}, r, {
+    onRetry: r.reload,
+    empty: r.data && !r.data.length ? filter === "new" ? "Новых магазинов нет" : "Магазинов нет" : null
+  })), (r.data || []).map(s => React.createElement(MgCard, {
+    key: s.id
+  }, React.createElement("div", {
+    className: "flex items-start gap-2"
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 800
+    }
+  }, s.name), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, s.phone, s.contactName ? " · " + s.contactName : ""), s.address && React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, s.address)), React.createElement("div", {
+    className: "text-right shrink-0"
+  }, React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 13,
+      fontWeight: 800
+    }
+  }, stMoney(s.ordersSum)), React.createElement("p", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)"
+    }
+  }, s.orders, " \u0437\u0430\u043A\u0430\u0437."))), React.createElement("div", {
+    className: "flex gap-1.5 mt-2 flex-wrap items-center"
+  }, s.clientCode ? React.createElement(Badge, {
+    bg: "#E4F7EA",
+    fg: "#127A33"
+  }, "1\u0421: ", s.clientName || s.clientCode) : React.createElement(Badge, {
+    bg: "#FFF6DE",
+    fg: "#8A5A00"
+  }, "\u043D\u0435\u0442 \u0432 1\u0421"), s.status === "blocked" && React.createElement(Badge, {
+    bg: "#FCE7E6",
+    fg: "#B3261E"
+  }, "\u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D"), React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      color: "var(--muted)"
+    }
+  }, "\u0440\u0435\u0433. ", stFmtTime(s.createdAt), s.lastLoginAt ? " · заходил " + stFmtTime(s.lastLoginAt) : "")), React.createElement("div", {
+    className: "flex gap-2 mt-2.5"
+  }, !s.clientCode && React.createElement(PrimaryButton, {
+    small: true,
+    onClick: () => setLinkFor(s)
+  }, "\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C \u043A \u043A\u043B\u0438\u0435\u043D\u0442\u0443 1\u0421"), React.createElement(GhostButton, {
+    small: true,
+    onClick: () => setStatus(s, s.status === "blocked" ? "active" : "blocked")
+  }, s.status === "blocked" ? "Разблокировать" : "Заблокировать")))), linkFor && React.createElement(ShopLinkModal, {
+    session: session,
+    shop: linkFor,
+    onClose: () => setLinkFor(null),
+    onDone: () => {
+      setLinkFor(null);
+      showToast("Магазин привязан");
+      r.reload();
+    }
+  }));
+}
 const ADMIN_TABS = {
   shift: ["power", "Смена"],
   orders: ["clipboard", "Заказы"],
   stock: ["package", "Склад"],
   staff: ["users", "Сотрудники"],
+  shops: ["building", "Магазины"],
   settings: ["settings", "Настройки"]
 };
 function adminTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
-  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("settings") && "settings"].filter(Boolean);
+  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("settings") && "settings"].filter(Boolean);
 }
 function AdminLiveApp({
   session,
@@ -8734,7 +9023,7 @@ function AdminLiveApp({
     color: "var(--red)"
   }))), React.createElement("div", {
     className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
-  }, tab === "shift" && React.createElement(AdminShiftLive, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "stock" && React.createElement(MgStock, p), tab === "staff" && React.createElement(LiveUsers, p), tab === "settings" && React.createElement(AdminSettingsLive, p)), React.createElement(AppNav, {
+  }, tab === "shift" && React.createElement(AdminShiftLive, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "stock" && React.createElement(MgStock, p), tab === "staff" && React.createElement(LiveUsers, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "settings" && React.createElement(AdminSettingsLive, p)), React.createElement(AppNav, {
     items: tabs.map(id => ({
       id,
       icon: ADMIN_TABS[id][0],
@@ -8742,7 +9031,7 @@ function AdminLiveApp({
     })),
     active: tab,
     onPick: setTab,
-    spread: tabs.length <= 5,
+    spread: tabs.length <= 6,
     brand: React.createElement(NavBrand, {
       title: "Sapar Trade",
       sub: "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440"
@@ -9742,6 +10031,1067 @@ function DriverGpsPanel({
     }
   }, w)));
 }
+const shopAuth = {
+  token: null,
+  refreshToken: null,
+  pending: null
+};
+let shopMem = null;
+const shopSession = {
+  get() {
+    let v = shopMem;
+    try {
+      v = JSON.parse(localStorage.getItem("st.shop") || "null") || shopMem;
+    } catch (e) {}
+    if (v) {
+      shopAuth.token = v.token || null;
+      shopAuth.refreshToken = v.refreshToken || null;
+    }
+    return v;
+  },
+  set(v) {
+    shopMem = v || null;
+    shopAuth.token = v ? v.token || null : null;
+    shopAuth.refreshToken = v ? v.refreshToken || null : null;
+    try {
+      v ? localStorage.setItem("st.shop", JSON.stringify(v)) : localStorage.removeItem("st.shop");
+    } catch (e) {}
+  }
+};
+function shopRefresh() {
+  if (!shopAuth.refreshToken) return Promise.reject(new StApiError(401, "Сессия завершена, войдите снова"));
+  if (!shopAuth.pending) {
+    const rt = shopAuth.refreshToken;
+    shopAuth.pending = stFetch("/api/shop/refresh", {
+      method: "POST",
+      body: {
+        refreshToken: rt
+      }
+    }).then(r => {
+      const s = shopSession.get();
+      if (s && s.refreshToken === rt) shopSession.set({
+        ...s,
+        token: r.token,
+        shop: r.shop
+      });
+    }).finally(() => {
+      shopAuth.pending = null;
+    });
+  }
+  return shopAuth.pending;
+}
+async function shopApi(path, opts = {}) {
+  if (!shopAuth.refreshToken) shopSession.get();
+  if (!shopAuth.token || stJwtExp(shopAuth.token) - Date.now() < 60000) {
+    try {
+      await shopRefresh();
+    } catch (e) {
+      if (e.status === 401) throw e;
+    }
+  }
+  try {
+    return await stFetch(path, {
+      ...opts,
+      token: shopAuth.token
+    });
+  } catch (e) {
+    if (e.status !== 401) throw e;
+    await shopRefresh();
+    return stFetch(path, {
+      ...opts,
+      token: shopAuth.token
+    });
+  }
+}
+function useShopLive(path, onAuthLost) {
+  const [state, setState] = useState({
+    data: null,
+    error: null,
+    loading: true
+  });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (path === null) return undefined;
+    let alive = true;
+    setState(s => ({
+      ...s,
+      loading: !s.data,
+      error: null
+    }));
+    shopApi(path).then(data => alive && setState({
+      data,
+      error: null,
+      loading: false
+    })).catch(e => {
+      if (!alive) return;
+      if (e.status === 401 && onAuthLost) onAuthLost();
+      setState({
+        data: null,
+        error: e.message,
+        loading: false
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path, tick]);
+  return {
+    ...state,
+    reload: () => setTick(t => t + 1)
+  };
+}
+const SHOP_PAY = {
+  cash: "Наличными",
+  transfer: "Переводом",
+  debt: "В долг"
+};
+const SHOP_STATUS_COLOR = {
+  "Новый": ["#FFF6DE", "#8A5A00"],
+  "Принят": ["#E7EEFF", "#1B3FA0"],
+  "Собран": ["#EEF0FF", "#1B1464"],
+  "Отгружен": ["#E4F7EA", "#127A33"],
+  "Отменён": ["#FCE7E6", "#B3261E"]
+};
+function ShopLanding({
+  onOrder,
+  onStaff,
+  hasSession
+}) {
+  const logoTap = useDoubleTap(onStaff);
+  const app = useInstallApp();
+  const [help, setHelp] = useState(false);
+  const download = () => {
+    if (app.canPrompt) app.install();else setHelp(v => !v);
+  };
+  return React.createElement("div", {
+    className: "relative h-full",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "flex flex-col h-full px-6 pt-4 pb-6 font-body kz-narrow"
+  }, React.createElement("div", {
+    className: "flex justify-end"
+  }, React.createElement(LangSwitch, null)), React.createElement("div", {
+    className: "flex-1 flex flex-col items-center justify-center text-center"
+  }, React.createElement("button", {
+    onClick: logoTap,
+    className: "mb-5 select-none",
+    style: {
+      WebkitTapHighlightColor: "transparent",
+      background: "none",
+      border: 0,
+      padding: 0
+    },
+    "aria-label": "Sapar Trade"
+  }, React.createElement(Logo, {
+    size: 104,
+    full: true
+  })), React.createElement("h1", {
+    className: "font-display",
+    style: {
+      fontSize: 21,
+      fontWeight: 800,
+      color: "var(--ink)"
+    }
+  }, "\u041E\u043F\u0442\u043E\u0432\u044B\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B"), React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: "var(--muted)",
+      marginTop: 6,
+      maxWidth: 280,
+      lineHeight: 1.5
+    }
+  }, "\u0417\u0430\u043A\u0430\u0437\u044B\u0432\u0430\u0439\u0442\u0435 \u0442\u043E\u0432\u0430\u0440\u044B \u0434\u043B\u044F \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430 \u0441\u0430\u043C\u0438: \u0446\u0435\u043D\u044B \u043F\u043E \u0432\u0430\u0448\u0435\u043C\u0443 \u0434\u043E\u0433\u043E\u0432\u043E\u0440\u0443, \u0441\u0442\u0430\u0442\u0443\u0441 \u0437\u0430\u043A\u0430\u0437\u0430 \u0438 \u0434\u043E\u043B\u0433 \u2014 \u0432 \u043E\u0434\u043D\u043E\u043C \u043C\u0435\u0441\u0442\u0435.")), React.createElement(PrimaryButton, {
+    full: true,
+    onClick: onOrder
+  }, hasSession ? "Открыть магазин" : "Заказать товары"), !app.installed && React.createElement("div", {
+    className: "mt-3"
+  }, React.createElement(GhostButton, {
+    full: true,
+    onClick: download
+  }, "\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435"), help && !app.canPrompt && React.createElement(InstallApp, {
+    compact: true
+  }))));
+}
+function ShopLogin({
+  onBack,
+  onDone
+}) {
+  const [step, setStep] = useState("phone");
+  const [digits, setDigits] = useState("");
+  const [choices, setChoices] = useState([]);
+  const [form, setForm] = useState({
+    name: "",
+    contactName: "",
+    address: ""
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const phone = "+7" + digits;
+  const phoneOk = digits.length === 10;
+  const finish = r => onDone({
+    token: r.token,
+    refreshToken: r.refreshToken,
+    shop: r.shop
+  });
+  const login = async shopId => {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await stFetch("/api/shop/login", {
+        method: "POST",
+        body: {
+          phone,
+          shopId
+        }
+      });
+      if (r.choose) {
+        setChoices(r.choose);
+        setStep("choose");
+      } else finish(r);
+    } catch (e) {
+      if (e.status === 404) setStep("register");else setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const register = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      finish(await stFetch("/api/shop/register", {
+        method: "POST",
+        body: {
+          phone,
+          ...form
+        }
+      }));
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const back = () => step === "phone" ? onBack() : (setErr(""), setStep("phone"));
+  return React.createElement("div", {
+    className: "relative h-full",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "flex flex-col h-full px-6 pt-4 pb-6 font-body kz-narrow overflow-y-auto"
+  }, React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, React.createElement("button", {
+    onClick: back,
+    className: "p-2 -ml-2 rounded-full",
+    "aria-label": "\u041D\u0430\u0437\u0430\u0434"
+  }, React.createElement(Ico, {
+    name: "arrow-left",
+    size: 20,
+    color: "var(--ink)"
+  })), React.createElement(LangSwitch, null)), React.createElement("h1", {
+    className: "font-display",
+    style: {
+      fontSize: 21,
+      fontWeight: 800,
+      color: "var(--ink)"
+    }
+  }, step === "register" ? "Регистрация магазина" : step === "choose" ? "Какой магазин?" : "Вход для магазинов"), React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)",
+      margin: "4px 0 18px"
+    }
+  }, step === "register" ? "Такого номера у нас нет. Заполните данные — и сразу можно заказывать." : step === "choose" ? "На этом номере несколько магазинов." : "Введите номер телефона магазина — без пароля и кода."), step === "phone" && React.createElement(React.Fragment, null, React.createElement(PhoneField, {
+    value: digits,
+    onChange: setDigits
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      marginBottom: 10
+    }
+  }, err), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: !phoneOk || busy,
+    onClick: () => login()
+  }, busy ? "Входим…" : "Войти"), React.createElement("p", {
+    className: "text-center",
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      marginTop: 14
+    }
+  }, "\u041D\u0435\u0442 \u043D\u043E\u043C\u0435\u0440\u0430 \u0432 \u0431\u0430\u0437\u0435? \u041D\u0430\u0436\u043C\u0438\u0442\u0435 \xAB\u0412\u043E\u0439\u0442\u0438\xBB \u2014 \u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0438\u043C \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044E.")), step === "choose" && choices.map(c => React.createElement("button", {
+    key: c.id,
+    onClick: () => login(c.id),
+    disabled: busy,
+    className: "rounded-2xl p-4 mb-3 text-left press-98",
+    style: {
+      border: "1.5px solid var(--line)",
+      background: "#fff"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      color: "var(--ink)"
+    }
+  }, c.name), c.address && React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, c.address))), step === "register" && React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "rounded-xl px-3.5 py-3 mb-3",
+    style: {
+      background: "#fff",
+      border: "1.5px solid var(--line)"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      fontWeight: 600
+    }
+  }, "\u0422\u0435\u043B\u0435\u0444\u043E\u043D"), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, phone.replace(/^\+7(\d{3})(\d{3})(\d{2})(\d{2})$/, "+7 $1 $2 $3 $4"))), React.createElement(Field, {
+    label: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430",
+    value: form.name,
+    onChange: e => setForm({
+      ...form,
+      name: e.target.value
+    }),
+    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u041C\u0438\u043D\u0438-\u043C\u0430\u0440\u043A\u0435\u0442 \xAB\u0417\u0430\u0440\u044F\xBB"
+  }), React.createElement(Field, {
+    label: "\u0410\u0434\u0440\u0435\u0441",
+    value: form.address,
+    onChange: e => setForm({
+      ...form,
+      address: e.target.value
+    }),
+    placeholder: "\u0413\u043E\u0440\u043E\u0434, \u0443\u043B\u0438\u0446\u0430, \u0434\u043E\u043C"
+  }), React.createElement(Field, {
+    label: "\u041A\u043E\u043D\u0442\u0430\u043A\u0442\u043D\u043E\u0435 \u043B\u0438\u0446\u043E (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)",
+    value: form.contactName,
+    onChange: e => setForm({
+      ...form,
+      contactName: e.target.value
+    }),
+    placeholder: "\u041A\u0430\u043A \u043A \u0432\u0430\u043C \u043E\u0431\u0440\u0430\u0449\u0430\u0442\u044C\u0441\u044F"
+  }), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      marginBottom: 10
+    }
+  }, err), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy || form.name.trim().length < 2 || form.address.trim().length < 3,
+    onClick: register
+  }, busy ? "Регистрируем…" : "Зарегистрироваться и войти"))));
+}
+function ShopQty({
+  qty,
+  onChange,
+  disabled
+}) {
+  const set = v => onChange(Math.max(0, Math.min(100000, Math.round(v * 1000) / 1000)));
+  if (disabled) return React.createElement("span", {
+    style: {
+      fontSize: 11.5,
+      color: "#B3261E",
+      fontWeight: 700
+    }
+  }, "\u041D\u0435\u0442 \u0432 \u043D\u0430\u043B\u0438\u0447\u0438\u0438");
+  if (!qty) return React.createElement("button", {
+    onClick: () => set(1),
+    className: "px-4 py-2 rounded-xl font-bold press-98",
+    style: {
+      background: "var(--navy)",
+      color: "#fff",
+      fontSize: 12.5
+    }
+  }, "\u0412 \u043A\u043E\u0440\u0437\u0438\u043D\u0443");
+  return React.createElement("div", {
+    className: "flex items-center gap-1.5"
+  }, React.createElement("button", {
+    onClick: () => set(qty - 1),
+    className: "w-8 h-8 rounded-lg flex items-center justify-center",
+    style: {
+      background: "#F2F1F8"
+    },
+    "aria-label": "\u041C\u0435\u043D\u044C\u0448\u0435"
+  }, React.createElement(Ico, {
+    name: "minus",
+    size: 14
+  })), React.createElement("input", {
+    value: qty,
+    onChange: e => set(parseFloat(String(e.target.value).replace(",", ".")) || 0),
+    inputMode: "decimal",
+    className: "font-mono-kz text-center outline-none",
+    style: {
+      width: 46,
+      height: 32,
+      border: "1.5px solid var(--line)",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }), React.createElement("button", {
+    onClick: () => set(qty + 1),
+    className: "w-8 h-8 rounded-lg flex items-center justify-center",
+    style: {
+      background: "var(--navy)"
+    },
+    "aria-label": "\u0411\u043E\u043B\u044C\u0448\u0435"
+  }, React.createElement(Ico, {
+    name: "plus",
+    size: 14,
+    color: "#fff"
+  })));
+}
+function ShopCatalog({
+  cart,
+  setCart,
+  onAuthLost,
+  onOpenCart
+}) {
+  const cat = useShopLive("/api/shop/catalog", onAuthLost);
+  const [q, setQ] = useState("");
+  const [group, setGroup] = useState("");
+  const items = useMemo(() => {
+    const all = cat.data && cat.data.items || [];
+    const s = q.trim().toLowerCase();
+    return all.filter(i => (!group || i.group === group) && (!s || i.name.toLowerCase().includes(s)));
+  }, [cat.data, q, group]);
+  const setQty = (code, v) => setCart(c => {
+    const n = {
+      ...c
+    };
+    if (v > 0) n[code] = v;else delete n[code];
+    return n;
+  });
+  const lines = Object.keys(cart).length;
+  const total = (cat.data && cat.data.items || []).reduce((a, i) => a + (cart[i.code] ? cart[i.code] * i.price : 0), 0);
+  return React.createElement("div", {
+    className: "flex flex-col h-full"
+  }, React.createElement("div", {
+    className: "px-4 pt-3"
+  }, React.createElement(LiveSearch, {
+    value: q,
+    onChange: setQ,
+    placeholder: "\u041D\u0430\u0439\u0442\u0438 \u0442\u043E\u0432\u0430\u0440"
+  }), cat.data && cat.data.groups.length > 1 && React.createElement("div", {
+    className: "flex gap-1.5 overflow-x-auto pb-2",
+    style: {
+      scrollbarWidth: "none"
+    }
+  }, React.createElement(LiveChip, {
+    on: !group,
+    onClick: () => setGroup("")
+  }, "\u0412\u0441\u0435"), cat.data.groups.map(g => React.createElement(LiveChip, {
+    key: g,
+    on: group === g,
+    onClick: () => setGroup(g)
+  }, g)))), React.createElement("div", {
+    className: "flex-1 overflow-y-auto px-4",
+    style: {
+      paddingBottom: lines ? 150 : 90
+    }
+  }, React.createElement(LiveState, {
+    loading: cat.loading,
+    error: cat.error,
+    onRetry: cat.reload,
+    empty: cat.data && !items.length ? q || group ? "Ничего не найдено" : "Каталог пока пуст" : null
+  }), items.map(i => React.createElement("div", {
+    key: i.code,
+    className: "flex items-center gap-3 py-3",
+    style: {
+      borderBottom: "1px solid var(--line)",
+      opacity: i.inStock ? 1 : 0.65
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 700,
+      color: "var(--ink)",
+      lineHeight: 1.3
+    }
+  }, i.name), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 12.5,
+      color: "var(--navy)",
+      fontWeight: 700,
+      marginTop: 2
+    }
+  }, stMoney(i.price), i.unit ? React.createElement("span", {
+    style: {
+      color: "var(--muted)",
+      fontWeight: 500
+    }
+  }, " / ", i.unit) : null)), React.createElement(ShopQty, {
+    qty: cart[i.code] || 0,
+    onChange: v => setQty(i.code, v),
+    disabled: !i.inStock
+  })))), lines > 0 && React.createElement("div", {
+    className: "absolute left-0 right-0 px-4",
+    style: {
+      bottom: 72
+    }
+  }, React.createElement("button", {
+    onClick: onOpenCart,
+    className: "w-full rounded-2xl px-4 py-3.5 flex items-center justify-between press-98",
+    style: {
+      background: "var(--navy)",
+      color: "#fff"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13.5,
+      fontWeight: 700
+    }
+  }, "\u041A\u043E\u0440\u0437\u0438\u043D\u0430 \xB7 ", lines, " \u043F\u043E\u0437."), React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 14,
+      fontWeight: 800
+    }
+  }, stMoney(total)))));
+}
+function ShopCartModal({
+  cart,
+  setCart,
+  onClose,
+  onAuthLost,
+  onDone
+}) {
+  const cat = useShopLive("/api/shop/catalog", onAuthLost);
+  const debt = useShopLive("/api/shop/debt", onAuthLost);
+  const [payment, setPayment] = useState("cash");
+  const [comment, setComment] = useState("");
+  const [date, setDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const byCode = new Map((cat.data && cat.data.items || []).map(i => [i.code, i]));
+  const lines = Object.entries(cart).map(([code, qty]) => ({
+    code,
+    qty,
+    it: byCode.get(code)
+  })).filter(l => l.it);
+  const total = lines.reduce((a, l) => a + l.qty * l.it.price, 0);
+  const d = debt.data;
+  const debtOn = d && d.limit > 0;
+  const setQty = (code, v) => setCart(c => {
+    const n = {
+      ...c
+    };
+    if (v > 0) n[code] = v;else delete n[code];
+    return n;
+  });
+  const submit = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await shopApi("/api/shop/orders", {
+        method: "POST",
+        body: {
+          items: lines.map(l => ({
+            code: l.code,
+            qty: l.qty
+          })),
+          payment,
+          comment: comment.trim() || undefined,
+          deliveryDate: date || undefined
+        }
+      });
+      onDone(r);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return React.createElement(Modal, {
+    title: "\u041A\u043E\u0440\u0437\u0438\u043D\u0430",
+    onClose: onClose,
+    wide: true
+  }, React.createElement("div", {
+    className: "px-5 pb-6 overflow-y-auto",
+    style: {
+      maxHeight: "70vh"
+    }
+  }, React.createElement(LiveState, {
+    loading: cat.loading,
+    error: cat.error,
+    onRetry: cat.reload,
+    empty: !lines.length && !cat.loading ? "Корзина пуста" : null
+  }), lines.map(l => React.createElement("div", {
+    key: l.code,
+    className: "flex items-center gap-3 py-2.5",
+    style: {
+      borderBottom: "1px solid var(--line)"
+    }
+  }, React.createElement("div", {
+    className: "flex-1 min-w-0"
+  }, React.createElement("p", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      lineHeight: 1.3
+    }
+  }, l.it.name), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, stMoney(l.it.price), " \xD7 ", stNum(l.qty), " = ", React.createElement("b", {
+    style: {
+      color: "var(--ink)"
+    }
+  }, stMoney(l.it.price * l.qty)))), React.createElement(ShopQty, {
+    qty: l.qty,
+    onChange: v => setQty(l.code, v)
+  }))), !!lines.length && React.createElement(React.Fragment, null, React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      fontWeight: 600,
+      margin: "14px 0 6px"
+    }
+  }, "\u041E\u043F\u043B\u0430\u0442\u0430"), React.createElement("div", {
+    className: "flex gap-2 mb-1"
+  }, [["cash", "Наличными"], ["transfer", "Переводом"], ["debt", "В долг"]].map(([id, label]) => {
+    const off = id === "debt" && !debtOn;
+    return React.createElement("button", {
+      key: id,
+      disabled: off,
+      onClick: () => setPayment(id),
+      className: "flex-1 py-2.5 rounded-xl font-semibold",
+      style: {
+        fontSize: 12.5,
+        border: "1.5px solid " + (payment === id ? "var(--navy)" : "var(--line)"),
+        background: payment === id ? "#EEF0FF" : "#fff",
+        color: off ? "#B5B3C6" : "var(--ink)"
+      }
+    }, label);
+  })), debtOn ? React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, "\u0412 \u0434\u043E\u043B\u0433 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E: ", React.createElement("b", null, stMoney(d.available))) : React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, "\xAB\u0412 \u0434\u043E\u043B\u0433\xBB \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0430\u0435\u0442 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440. \u041F\u043E\u0437\u0432\u043E\u043D\u0438\u0442\u0435 \u0432 \u043E\u0444\u0438\u0441, \u0435\u0441\u043B\u0438 \u043D\u0443\u0436\u043D\u043E."), payment === "debt" && total > (d ? d.available : 0) && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#B3261E",
+      marginTop: 4
+    }
+  }, "\u0421\u0443\u043C\u043C\u0430 \u0431\u043E\u043B\u044C\u0448\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E\u0433\u043E \u043B\u0438\u043C\u0438\u0442\u0430 \u2014 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0440\u0443\u0433\u0443\u044E \u043E\u043F\u043B\u0430\u0442\u0443."), React.createElement("label", {
+    className: "block mt-3"
+  }, React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      fontWeight: 600
+    }
+  }, "\u0414\u043E\u0441\u0442\u0430\u0432\u0438\u0442\u044C \u043A \u0434\u0430\u0442\u0435 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)"), React.createElement("input", {
+    type: "date",
+    value: date,
+    min: stToday(),
+    onChange: e => setDate(e.target.value),
+    className: "w-full mt-1 px-3.5 py-3 rounded-xl outline-none",
+    style: {
+      border: "1.5px solid var(--line)",
+      fontSize: 14
+    }
+  })), React.createElement("label", {
+    className: "block mt-3"
+  }, React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "var(--muted)",
+      fontWeight: 600
+    }
+  }, "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439"), React.createElement("textarea", {
+    value: comment,
+    onChange: e => setComment(e.target.value),
+    rows: 2,
+    maxLength: 500,
+    className: "w-full mt-1 px-3.5 py-3 rounded-xl outline-none",
+    style: {
+      border: "1.5px solid var(--line)",
+      fontSize: 14
+    }
+  })), err && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#B3261E",
+      margin: "10px 0"
+    }
+  }, err), React.createElement("div", {
+    className: "flex items-center justify-between mt-4 mb-3"
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "var(--muted)"
+    }
+  }, "\u0418\u0442\u043E\u0433\u043E"), React.createElement("span", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 18,
+      fontWeight: 800
+    }
+  }, stMoney(total))), React.createElement(PrimaryButton, {
+    full: true,
+    disabled: busy || payment === "debt" && (!debtOn || total > d.available),
+    onClick: submit
+  }, busy ? "Отправляем…" : "Оформить заказ"), React.createElement("p", {
+    className: "text-center",
+    style: {
+      fontSize: 11,
+      color: "var(--muted)",
+      marginTop: 8
+    }
+  }, "\u041E\u043A\u043E\u043D\u0447\u0430\u0442\u0435\u043B\u044C\u043D\u0443\u044E \u0441\u0443\u043C\u043C\u0443 \u043F\u043E\u0441\u0447\u0438\u0442\u0430\u0435\u0442 \u0441\u0435\u0440\u0432\u0435\u0440 \u043F\u043E \u0446\u0435\u043D\u0435 \u0432\u0430\u0448\u0435\u0433\u043E \u0434\u043E\u0433\u043E\u0432\u043E\u0440\u0430."))));
+}
+function ShopOrders({
+  onAuthLost,
+  toast
+}) {
+  const o = useShopLive("/api/shop/orders", onAuthLost);
+  const [open, setOpen] = useState(null);
+  const [busy, setBusy] = useState(0);
+  const cancel = async id => {
+    setBusy(id);
+    try {
+      await shopApi("/api/shop/orders/" + id + "/cancel", {
+        method: "POST"
+      });
+      toast("Заказ отменён");
+      o.reload();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      setBusy(0);
+    }
+  };
+  return React.createElement("div", {
+    className: "px-4 pt-3 overflow-y-auto h-full",
+    style: {
+      paddingBottom: 90
+    }
+  }, React.createElement(SectionTitle, {
+    sub: "\u0421\u0442\u0430\u0442\u0443\u0441 \u043E\u0431\u043D\u043E\u0432\u043B\u044F\u0435\u0442\u0441\u044F, \u043A\u043E\u0433\u0434\u0430 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0442 \u0438 \u0441\u043E\u0431\u0438\u0440\u0430\u0435\u0442 \u0437\u0430\u043A\u0430\u0437"
+  }, "\u041C\u043E\u0438 \u0437\u0430\u043A\u0430\u0437\u044B"), React.createElement(LiveState, {
+    loading: o.loading,
+    error: o.error,
+    onRetry: o.reload,
+    empty: o.data && !o.data.length ? "Заказов пока нет. Откройте «Каталог» и оформите первый." : null
+  }), (o.data || []).map(x => {
+    const [bg, fg] = SHOP_STATUS_COLOR[x.status] || ["#F2F1F8", "var(--ink)"];
+    return React.createElement("div", {
+      key: x.id,
+      className: "rounded-2xl p-3.5 mb-2.5",
+      style: {
+        background: "#fff",
+        border: "1px solid var(--line)"
+      }
+    }, React.createElement("button", {
+      className: "w-full text-left",
+      onClick: () => setOpen(open === x.id ? null : x.id)
+    }, React.createElement("div", {
+      className: "flex items-center justify-between"
+    }, React.createElement("span", {
+      className: "font-mono-kz",
+      style: {
+        fontSize: 13,
+        fontWeight: 800
+      }
+    }, x.number), React.createElement(Badge, {
+      bg: bg,
+      fg: fg
+    }, x.status)), React.createElement("div", {
+      className: "flex items-center justify-between mt-1"
+    }, React.createElement("span", {
+      style: {
+        fontSize: 11.5,
+        color: "var(--muted)"
+      }
+    }, stFmtTime(x.created_at), " \xB7 ", SHOP_PAY[x.payment] || x.payment), React.createElement("span", {
+      className: "font-mono-kz",
+      style: {
+        fontSize: 14,
+        fontWeight: 800
+      }
+    }, stMoney(x.total)))), open === x.id && React.createElement("div", {
+      className: "mt-2 pt-2",
+      style: {
+        borderTop: "1px solid var(--line)"
+      }
+    }, (x.items || []).map((i, n) => React.createElement("div", {
+      key: n,
+      className: "flex justify-between py-1",
+      style: {
+        fontSize: 12.5
+      }
+    }, React.createElement("span", {
+      className: "flex-1 pr-2"
+    }, i.name, " ", React.createElement("span", {
+      style: {
+        color: "var(--muted)"
+      }
+    }, "\xD7 ", stNum(i.qty))), React.createElement("span", {
+      className: "font-mono-kz"
+    }, stMoney(i.sum)))), x.comment && React.createElement("p", {
+      style: {
+        fontSize: 12,
+        color: "var(--muted)",
+        marginTop: 4
+      }
+    }, "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439: ", x.comment), x.status === "Новый" && React.createElement("div", {
+      className: "mt-2"
+    }, React.createElement(GhostButton, {
+      small: true,
+      onClick: () => cancel(x.id)
+    }, busy === x.id ? "Отменяем…" : "Отменить заказ"))));
+  }));
+}
+function ShopDebt({
+  shop,
+  onAuthLost
+}) {
+  const d = useShopLive("/api/shop/debt", onAuthLost);
+  const x = d.data;
+  const tile = (label, value, color) => React.createElement("div", {
+    className: "rounded-2xl p-3.5",
+    style: {
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)"
+    }
+  }, label), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 17,
+      fontWeight: 800,
+      color: color || "var(--ink)",
+      marginTop: 2
+    }
+  }, stMoney(value)));
+  return React.createElement("div", {
+    className: "px-4 pt-3 overflow-y-auto h-full",
+    style: {
+      paddingBottom: 90
+    }
+  }, React.createElement(SectionTitle, {
+    sub: "\u041F\u043E \u0434\u0430\u043D\u043D\u044B\u043C 1\u0421"
+  }, "\u041C\u043E\u0439 \u0434\u043E\u043B\u0433"), React.createElement(LiveState, {
+    loading: d.loading,
+    error: d.error,
+    onRetry: d.reload
+  }), x && !shop.linked && React.createElement("div", {
+    className: "rounded-2xl p-4 mb-3",
+    style: {
+      background: "#FFF6DE"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "#8A5A00",
+      fontWeight: 600,
+      lineHeight: 1.5
+    }
+  }, "\u0412\u0430\u0448 \u043C\u0430\u0433\u0430\u0437\u0438\u043D \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D \u043A \u0431\u0430\u0437\u0435 1\u0421, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u0434\u043E\u043B\u0433\u0430 \u043D\u0435\u0442. \u041C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u043F\u0440\u0438\u0432\u044F\u0436\u0435\u0442 \u0435\u0433\u043E \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0432\u043E\u0433\u043E \u0437\u0430\u043A\u0430\u0437\u0430 \u2014 \u0442\u043E\u0433\u0434\u0430 \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u0432\u0430\u0448\u0438 \u0446\u0435\u043D\u044B, \u0434\u043E\u043B\u0433 \u0438 \xAB\u0432 \u0434\u043E\u043B\u0433\xBB.")), x && React.createElement(React.Fragment, null, React.createElement("div", {
+    className: "grid grid-cols-2 gap-2.5 mb-3"
+  }, tile("Долг сейчас", x.debt, x.debt > 0 ? "#B3261E" : "#127A33"), tile("Просрочено", x.overdue, x.overdue > 0 ? "#B3261E" : "var(--ink)"), tile("Лимит «в долг»", x.limit), tile("Доступно «в долг»", x.available, "var(--navy)")), x.pending > 0 && React.createElement("p", {
+    style: {
+      fontSize: 11.5,
+      color: "var(--muted)",
+      marginBottom: 10
+    }
+  }, "\u0412 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0439 \u043B\u0438\u043C\u0438\u0442 \u0443\u0436\u0435 \u0432\u0445\u043E\u0434\u044F\u0442 \u0432\u0430\u0448\u0438 \u043D\u0435\u043E\u0442\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u044B\u0435 \u0437\u0430\u043A\u0430\u0437\u044B \xAB\u0432 \u0434\u043E\u043B\u0433\xBB: ", stMoney(x.pending), "."), !!x.docs.length && React.createElement("p", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: "var(--muted)",
+      margin: "6px 0"
+    }
+  }, "\u041D\u0415\u041E\u041F\u041B\u0410\u0427\u0415\u041D\u041D\u042B\u0415 \u0414\u041E\u041A\u0423\u041C\u0415\u041D\u0422\u042B"), x.docs.map((i, n) => React.createElement(LiveItem, {
+    key: n,
+    title: i.name || "Документ",
+    sub: i.date ? stFmtDate(i.date) : "без даты",
+    value: stMoney(i.amount)
+  })), shop.linked && !x.docs.length && React.createElement("p", {
+    className: "text-center py-6",
+    style: {
+      fontSize: 12.5,
+      color: "#127A33",
+      fontWeight: 600
+    }
+  }, "\u0414\u043E\u043B\u0433\u043E\u0432 \u043D\u0435\u0442")));
+}
+function ShopProfile({
+  shop,
+  onExit
+}) {
+  return React.createElement("div", {
+    className: "px-4 pt-3 overflow-y-auto h-full",
+    style: {
+      paddingBottom: 90
+    }
+  }, React.createElement(SectionTitle, null, "\u041F\u0440\u043E\u0444\u0438\u043B\u044C"), React.createElement("div", {
+    className: "rounded-2xl p-4 mb-3",
+    style: {
+      background: "#fff",
+      border: "1px solid var(--line)"
+    }
+  }, React.createElement("p", {
+    style: {
+      fontSize: 15,
+      fontWeight: 800
+    }
+  }, shop.name), React.createElement("p", {
+    className: "font-mono-kz",
+    style: {
+      fontSize: 13,
+      color: "var(--muted)",
+      marginTop: 4
+    }
+  }, shop.phone), shop.address && React.createElement("p", {
+    style: {
+      fontSize: 12.5,
+      color: "var(--muted)",
+      marginTop: 2
+    }
+  }, shop.address)), React.createElement(InstallApp, null), React.createElement("div", {
+    className: "mt-4"
+  }, React.createElement(GhostButton, {
+    full: true,
+    onClick: onExit
+  }, "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430")));
+}
+function ShopApp({
+  session,
+  onExit
+}) {
+  const [tab, setTab] = useState("catalog");
+  const [cart, setCart] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("st.shop.cart") || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [cartOpen, setCartOpen] = useState(false);
+  const [toast, setToast] = useState("");
+  useEffect(() => {
+    try {
+      localStorage.setItem("st.shop.cart", JSON.stringify(cart));
+    } catch (e) {}
+  }, [cart]);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(""), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const shop = session.shop;
+  const lost = () => onExit("Вход закрыт. Войдите снова.");
+  const tabs = [["catalog", "Каталог", "store"], ["orders", "Заказы", "clipboard"], ["debt", "Долг", "wallet"], ["profile", "Профиль", "users"]];
+  return React.createElement("div", {
+    className: "relative h-full flex flex-col font-body kz-narrow",
+    style: {
+      background: "var(--bg)"
+    }
+  }, React.createElement(StatusBar, null), React.createElement("div", {
+    className: "px-4 pt-3 pb-1 flex items-center justify-between"
+  }, React.createElement("div", {
+    className: "min-w-0"
+  }, React.createElement("p", {
+    className: "font-display truncate",
+    style: {
+      fontSize: 15,
+      fontWeight: 800
+    }
+  }, shop.name), React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: "var(--muted)"
+    }
+  }, "Sapar Trade \xB7 \u043E\u043F\u0442\u043E\u0432\u044B\u0435 \u043F\u0440\u043E\u0434\u0443\u043A\u0442\u044B")), React.createElement(Logo, {
+    size: 34
+  })), React.createElement("div", {
+    className: "flex-1 min-h-0 relative"
+  }, tab === "catalog" && React.createElement(ShopCatalog, {
+    cart: cart,
+    setCart: setCart,
+    onAuthLost: lost,
+    onOpenCart: () => setCartOpen(true)
+  }), tab === "orders" && React.createElement(ShopOrders, {
+    onAuthLost: lost,
+    toast: setToast
+  }), tab === "debt" && React.createElement(ShopDebt, {
+    shop: shop,
+    onAuthLost: lost
+  }), tab === "profile" && React.createElement(ShopProfile, {
+    shop: shop,
+    onExit: () => onExit()
+  })), React.createElement("div", {
+    className: "absolute left-0 right-0 bottom-0 flex",
+    style: {
+      background: "#fff",
+      borderTop: "1px solid var(--line)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)"
+    }
+  }, tabs.map(([id, label, icon]) => React.createElement("button", {
+    key: id,
+    onClick: () => setTab(id),
+    className: "flex-1 flex flex-col items-center py-2.5 gap-0.5",
+    style: {
+      color: tab === id ? "var(--navy)" : "var(--muted)"
+    }
+  }, React.createElement(Ico, {
+    name: icon,
+    size: 19
+  }), React.createElement("span", {
+    style: {
+      fontSize: 10.5,
+      fontWeight: tab === id ? 800 : 600
+    }
+  }, label)))), cartOpen && React.createElement(ShopCartModal, {
+    cart: cart,
+    setCart: setCart,
+    onAuthLost: lost,
+    onClose: () => setCartOpen(false),
+    onDone: r => {
+      setCart({});
+      setCartOpen(false);
+      setTab("orders");
+      setToast("Заказ " + r.number + " отправлен");
+    }
+  }), React.createElement(Toast, {
+    toast: toast
+  }));
+}
 const navCur = () => history.state && history.state.st ? history.state : {
   st: 1,
   nav: {}
@@ -10044,13 +11394,18 @@ function App() {
   };
   const [liveNotice, setLiveNotice] = useState("");
   const clientMode = location.hash === "#client";
-  const HOME = clientMode ? "client" : "staffChoice";
+  const HOME = clientMode ? "client" : "landing";
+  const [shopSess, setShopSessState] = useState(() => shopSession.get());
+  const setShopSess = v => {
+    shopSession.set(v);
+    setShopSessState(v);
+  };
   const [root, setRoot, replaceRoot] = useNavState("root", {
-    view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME,
+    view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : shopSession.get() && stIsStandalone() ? "shop" : HOME,
     mode: "mgmt"
   });
   const loginMode = root.mode || "mgmt";
-  const view = root.view === "live" && !liveSession ? HOME : root.view;
+  const view = root.view === "live" && !liveSession ? HOME : root.view === "shop" && !shopSess ? HOME : root.view;
   const setView = v => setRoot({
     view: v,
     mode: loginMode
@@ -10151,8 +11506,44 @@ function App() {
   }, view === "client" && React.createElement(ClientApp, {
     shared: shared,
     onAdminTrigger: () => setView("staffChoice")
+  }), view === "landing" && React.createElement(ShopLanding, {
+    hasSession: !!shopSess,
+    onOrder: () => setView(shopSess ? "shop" : "shopLogin"),
+    onStaff: () => setView("staffChoice")
+  }), view === "shopLogin" && React.createElement(ShopLogin, {
+    onBack: () => replaceRoot({
+      view: "landing",
+      mode: loginMode
+    }),
+    onDone: s => {
+      setShopSess(s);
+      replaceRoot({
+        view: "shop",
+        mode: loginMode
+      });
+    }
+  }), view === "shop" && shopSess && React.createElement(ShopApp, {
+    session: shopSess,
+    onExit: msg => {
+      const rt = shopSess.refreshToken;
+      if (rt) stFetch("/api/shop/logout", {
+        method: "POST",
+        body: {
+          refreshToken: rt
+        }
+      }).catch(() => {});
+      setShopSess(null);
+      const next = {
+        view: msg ? "shopLogin" : "landing",
+        mode: loginMode
+      };
+      navReset({
+        root: next
+      });
+      replaceRoot(next);
+    }
   }), view === "staffChoice" && React.createElement(StaffGate, {
-    onCancel: clientMode ? () => setView("client") : null,
+    onCancel: () => setView(clientMode ? "client" : "landing"),
     onPick: mode => setRoot({
       view: "liveLogin",
       mode,

@@ -1,11 +1,11 @@
 // Sapar Trade — администратор. Модуль: оболочка админ-панели на реальных данных (вход по личному логину)
 // Разделы по правам: Смена, Заказы, Склад (1С), Сотрудники, Настройки. Реклама/Истории/CRM — вернутся с приложением для магазинов.
 
-const ADMIN_TABS = { shift: ["power", "Смена"], orders: ["clipboard", "Заказы"], stock: ["package", "Склад"], staff: ["users", "Сотрудники"], settings: ["settings", "Настройки"] };
+const ADMIN_TABS = { shift: ["power", "Смена"], orders: ["clipboard", "Заказы"], stock: ["package", "Склад"], staff: ["users", "Сотрудники"], shops: ["building", "Магазины"], settings: ["settings", "Настройки"] };
 
 function adminTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
-  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("settings") && "settings"].filter(Boolean);
+  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("settings") && "settings"].filter(Boolean);
 }
 
 function AdminLiveApp({ session, setSession, onExit }) {
@@ -34,9 +34,10 @@ function AdminLiveApp({ session, setSession, onExit }) {
         {tab === "orders" && <OrdersBoard {...p} />}
         {tab === "stock" && <MgStock {...p} />}
         {tab === "staff" && <LiveUsers {...p} />}
+        {tab === "shops" && <AdminShopsLive {...p} />}
         {tab === "settings" && <AdminSettingsLive {...p} />}
       </div>
-      <AppNav items={tabs.map((id) => ({ id, icon: ADMIN_TABS[id][0], label: ADMIN_TABS[id][1] }))} active={tab} onPick={setTab} spread={tabs.length <= 5}
+      <AppNav items={tabs.map((id) => ({ id, icon: ADMIN_TABS[id][0], label: ADMIN_TABS[id][1] }))} active={tab} onPick={setTab} spread={tabs.length <= 6}
         brand={<NavBrand title="Sapar Trade" sub="Администратор" />} />
       {pwd && <LivePasswordModal session={session} onClose={() => setPwd(false)}
         onChanged={(token) => { setSession({ ...session, token }); setPwd(false); showToast("Пароль изменён"); }} />}

@@ -48,6 +48,7 @@ function MgmtApp({ session, setSession, onExit }) {
         {tab === "finance" && <MgFinance {...p} />}
         {tab === "problems" && <MgProblems {...p} />}
         {tab === "tasks" && <MgTasks {...p} />}
+        {tab === "shops" && <AdminShopsLive {...p} />}
         {tab === "ai" && <MgAI {...p} />}
         {tab === "system" && <MgSystem {...p} />}
       </div>

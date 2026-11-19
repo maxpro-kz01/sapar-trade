@@ -15,6 +15,8 @@ export async function requireAuth(req, res, next) {
   if (!m) return res.status(401).json({ error: "Нужен вход" });
   let payload;
   try { payload = jwt.verify(m[1], config.jwtSecret); } catch { return res.status(401).json({ error: "Сессия истекла, войдите снова" }); }
+  // токен магазина (typ) никогда не открывает методы сотрудников: id магазина мог бы совпасть с id сотрудника
+  if (payload.typ) return res.status(401).json({ error: "Нужен вход сотрудника" });
   const { rows } = await q("SELECT * FROM users WHERE id = $1", [payload.sub]);
   const u = rows[0];
   if (!u || !u.is_active || u.token_version !== payload.tv) return res.status(401).json({ error: "Сессия завершена, войдите снова" });

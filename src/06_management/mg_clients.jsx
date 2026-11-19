@@ -1,7 +1,45 @@
 // Sapar Trade — система управления. Модуль: Клиенты и дебиторка (данные 1С)
 // Возраст долга, просрочка, последняя покупка, «спящие» клиенты; фильтр по ТП (переход из «Команды»).
 
-function MgClients({ session, range, authLost, param, setParam }) {
+// Окно «Лимит в долг» для клиента: сколько можно отгружать магазину в долг через его заказы (владелец и директор)
+function ClientLimitModal({ session, client, onClose, showToast }) {
+  const info = useLive(session, "/api/clients/" + encodeURIComponent(client.code) + "/limit");
+  const [val, setVal] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const d = info.data;
+  const shown = val === null ? (d ? String(d.limit) : "") : val;
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      await stApi("/api/clients/" + encodeURIComponent(client.code) + "/limit", { method: "PUT", token: session.token, body: { limit: Number(String(shown).replace(/\s/g, "").replace(",", ".")) || 0 } });
+      showToast && showToast("Лимит сохранён"); onClose();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={"Лимит «в долг»: " + client.name} onClose={onClose}>
+      <div className="px-5 pb-6">
+        <LiveState loading={info.loading} error={info.error} onRetry={info.reload} />
+        {d && (
+          <>
+            <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>Магазин сможет оформлять заказы «в долг» через приложение, пока долг в 1С и неотгруженные заказы не превысят лимит. 0 — «в долг» выключено.</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <MgKpi label="Долг в 1С" value={stMoney(d.debt)} />
+              <MgKpi label="Неотгруженные «в долг»" value={stMoney(d.pending)} />
+            </div>
+            <Field label="Лимит, ₸" value={shown} onChange={(e) => setVal(e.target.value)} inputMode="numeric" placeholder="0" />
+            {err && <p style={{ fontSize: 12.5, color: "#B3261E", marginBottom: 8 }}>{err}</p>}
+            <PrimaryButton full disabled={busy} onClick={save}>{busy ? "Сохраняем…" : "Сохранить"}</PrimaryButton>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function MgClients({ session, range, authLost, param, setParam, showToast }) {
+  const canLimit = liveCan(session, "credit");
+  const [limitFor, setLimitFor] = useState(null);
   const manager = param && typeof param === "object" ? param.manager : "";
   const [q, setQ] = useState("");
   const [mode, setMode] = useState(param === "sleeping" ? "sleeping" : param === "debtors" ? "debtors" : "all");
@@ -52,7 +90,7 @@ function MgClients({ session, range, authLost, param, setParam }) {
         <MgCard>
           <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Найдено: {stNum(sm.clients)}{sm.clients > d.items.length ? ", показаны первые " + d.items.length : ""}</p>
           {d.items.map((x) => (
-            <LiveItem key={x.code} title={x.name}
+            <LiveItem key={x.code} title={x.name} onClick={canLimit ? () => setLimitFor(x) : undefined}
               sub={[x.manager, x.phone, x.lastSale ? "посл. покупка " + stFmtDate(x.lastSale) : "покупок нет"].filter(Boolean).join(" · ")}
               value={x.debt !== undefined ? stMoney(x.debt) : stMoney(x.revenue)}
               valueColor={x.overdue > 0 ? "var(--red)" : undefined}
@@ -62,6 +100,7 @@ function MgClients({ session, range, authLost, param, setParam }) {
           ))}
         </MgCard>
       )}
+      {limitFor && <ClientLimitModal session={session} client={limitFor} showToast={showToast} onClose={() => setLimitFor(null)} />}
     </>
   );
 }

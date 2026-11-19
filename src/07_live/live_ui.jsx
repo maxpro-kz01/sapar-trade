@@ -75,9 +75,9 @@ function LiveChip({ on, onClick, children }) {
 }
 
 // Строка списка: слева название и подпись, справа сумма и подпись
-function LiveItem({ title, sub, value, valueSub, valueColor }) {
+function LiveItem({ title, sub, value, valueSub, valueColor, onClick }) {
   return (
-    <div className="flex items-start gap-3 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
+    <div className="flex items-start gap-3 py-2.5" onClick={onClick} style={{ borderBottom: "1px solid var(--line)", cursor: onClick ? "pointer" : undefined }}>
       <div className="flex-1 min-w-0">
         <p style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", wordBreak: "break-word" }}>{title}</p>
         {sub && <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{sub}</p>}

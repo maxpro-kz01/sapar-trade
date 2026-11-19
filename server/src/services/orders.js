@@ -68,12 +68,12 @@ export async function listOrders(user, { status, from, to, limit } = {}) {
   if (to && isIsoDate(to)) { p.push(to); where += ` AND o.created_at < $${p.length}::date + 1`; }
   const n = Math.min(Math.max(Number(limit) || 200, 1), 1000);
   const { rows } = await q(
-    `SELECT o.*, u.name AS creator,
+    `SELECT o.*, coalesce(u.name, CASE WHEN o.source = 'shop' THEN 'Магазин' END) AS creator,
             (SELECT json_agg(json_build_object('code', i.product_code, 'name', i.name, 'unit', i.unit, 'qty', i.qty, 'price', i.price, 'sum', i.sum) ORDER BY i.line)
              FROM order_items i WHERE i.order_id = o.id) AS items,
             (SELECT json_agg(json_build_object('at', e.at, 'event', e.event, 'note', e.note, 'user', eu.name) ORDER BY e.id)
              FROM order_events e LEFT JOIN users eu ON eu.id = e.user_id WHERE e.order_id = o.id) AS events
-     FROM orders o JOIN users u ON u.id = o.created_by
+     FROM orders o LEFT JOIN users u ON u.id = o.created_by
      WHERE ${where} ORDER BY o.id DESC LIMIT ${n}`, p);
   return rows.map((o) => ({ ...o, number: orderNumber(o.id) }));
 }
@@ -117,10 +117,10 @@ export async function pendingFor1C() {
   if (!(await getSettings()).onecOrders) return [];
   const { rows } = await q(
     `SELECT o.id, o.client_code, o.client_name, o.manager, o.comment, o.delivery_date, o.price_type, o.total, o.created_at,
-            u.name AS creator,
+            coalesce(u.name, 'Магазин') AS creator,
             (SELECT json_agg(json_build_object('code', i.product_code, 'qty', i.qty, 'price', i.price, 'sum', i.sum) ORDER BY i.line)
              FROM order_items i WHERE i.order_id = o.id) AS items
-     FROM orders o JOIN users u ON u.id = o.created_by
+     FROM orders o LEFT JOIN users u ON u.id = o.created_by
      WHERE o.onec_status = 'pending' AND o.status <> 'Отменён' ORDER BY o.id LIMIT 50`);
   return rows.map((o) => ({ ...o, number: orderNumber(o.id) }));
 }

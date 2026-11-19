@@ -21,6 +21,14 @@ export async function problems(user) {
     if (bad.length) list.push({ lvl: "yellow", code: "syncerr", title: `Ошибки загрузки из 1С: ${bad.length}`, detail: bad.map((b) => b.entity).join(", "), tab: "system" });
   }
 
+  if (can(user, "shops")) {
+    const { rows: [n] } = await q(
+      `SELECT (SELECT count(*) FROM shops WHERE client_code IS NULL AND status = 'active') AS unlinked,
+              (SELECT count(*) FROM orders WHERE source = 'shop' AND status = 'Новый') AS fresh`);
+    if (Number(n.unlinked) > 0) list.push({ lvl: "yellow", code: "newshops", title: `Новые магазины ждут привязки: ${n.unlinked}`, detail: "Зарегистрировались сами, их нет в 1С — привяжите к клиенту", tab: "shops" });
+    if (Number(n.fresh) > 0) list.push({ lvl: "yellow", code: "shoporders", title: `Новые заказы от магазинов: ${n.fresh}`, detail: "Магазины заказали сами — примите заказы", tab: "orders" });
+  }
+
   if (scopeOf(user, "debts")) {
     const p = [overdueDate(), shiftDay(t, -30)];
     const f = clientFilter(user, "debts", "d", p);

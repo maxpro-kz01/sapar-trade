@@ -8,6 +8,8 @@ import syncRoutes from "./routes/sync.js";
 import reportRoutes from "./routes/reports.js";
 import mgmtRoutes from "./routes/mgmt.js";
 import orderRoutes from "./routes/orders.js";
+import shopRoutes from "./routes/shop.js";
+import shopsAdminRoutes from "./routes/shops_admin.js";
 import fleetRoutes, { traccarRoutes } from "./routes/fleet.js";
 
 export function createApp() {
@@ -27,9 +29,11 @@ export function createApp() {
 
   app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
   app.use("/api/fleet/traccar", traccarRoutes); // без входа по паролю — до общих /api
+  app.use("/api/shop", shopRoutes); // вход магазинов — свой токен, до общих /api
   app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/sync", syncRoutes);
+  app.use("/api", shopsAdminRoutes);
   app.use("/api", reportRoutes);
   app.use("/api", mgmtRoutes);
   app.use("/api", orderRoutes);

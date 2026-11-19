@@ -11,15 +11,18 @@ function App() {
   const [liveSession, setLiveSessionState] = useState(() => stSession.get());
   const setLiveSession = (v) => { stSession.set(v); setLiveSessionState(v); };
   const [liveNotice, setLiveNotice] = useState("");
-  // Стартовый экран — вход для сотрудников. Клиентское приложение (для магазинов) — по ссылке …/#client
+  // Стартовый экран — «Заказать товары» и «Скачать приложение» для магазинов (11_shop). Вход сотрудников спрятан:
+  // двойной тап по логотипу. Старое демо клиентского приложения — по ссылке …/#client
   const clientMode = location.hash === "#client";
-  const HOME = clientMode ? "client" : "staffChoice";
+  const HOME = clientMode ? "client" : "landing";
+  const [shopSess, setShopSessState] = useState(() => shopSession.get());
+  const setShopSess = (v) => { shopSession.set(v); setShopSessState(v); };
   // экран и вид входа — в истории браузера: «Назад» с формы входа ведёт к выбору роли (nav_history.js)
   const [root, setRoot, replaceRoot] = useNavState("root",
-    { view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : HOME, mode: "mgmt" });
+    { view: stSession.get() ? "live" : location.hash === "#work" ? "liveLogin" : (shopSession.get() && stIsStandalone() ? "shop" : HOME), mode: "mgmt" });
   const loginMode = root.mode || "mgmt";
   // вернулись «Назад» в систему после выхода — показываем стартовый экран
-  const view = root.view === "live" && !liveSession ? HOME : root.view;
+  const view = root.view === "live" && !liveSession ? HOME : root.view === "shop" && !shopSess ? HOME : root.view;
   const setView = (v) => setRoot({ view: v, mode: loginMode });
   useBackGuard(view === "live");
   const [lang, setLang] = useState(initialLang);
@@ -65,7 +68,17 @@ function App() {
 
       <div className="relative h-full w-full kz-frame">
         {view === "client" && <ClientApp shared={shared} onAdminTrigger={() => setView("staffChoice")} />}
-        {view === "staffChoice" && <StaffGate onCancel={clientMode ? () => setView("client") : null} onPick={(mode) => setRoot({ view: "liveLogin", mode, from: "gate" })} />}
+        {view === "landing" && <ShopLanding hasSession={!!shopSess} onOrder={() => setView(shopSess ? "shop" : "shopLogin")} onStaff={() => setView("staffChoice")} />}
+        {view === "shopLogin" && <ShopLogin onBack={() => replaceRoot({ view: "landing", mode: loginMode })}
+          onDone={(s) => { setShopSess(s); replaceRoot({ view: "shop", mode: loginMode }); }} />}
+        {view === "shop" && shopSess && <ShopApp session={shopSess} onExit={(msg) => {
+          const rt = shopSess.refreshToken;
+          if (rt) stFetch("/api/shop/logout", { method: "POST", body: { refreshToken: rt } }).catch(() => {});
+          setShopSess(null);
+          const next = { view: msg ? "shopLogin" : "landing", mode: loginMode };
+          navReset({ root: next }); replaceRoot(next);
+        }} />}
+        {view === "staffChoice" && <StaffGate onCancel={() => setView(clientMode ? "client" : "landing")} onPick={(mode) => setRoot({ view: "liveLogin", mode, from: "gate" })} />}
         {view === "liveLogin" && <LiveLogin mode={loginMode} notice={liveNotice} onCancel={() => (root.from === "gate" ? history.back() : replaceRoot({ view: "staffChoice", mode: loginMode }))}
           onSuccess={(s) => { setLiveNotice(""); setLiveSession(s); replaceRoot({ view: "live", mode: loginMode }); }} />}
         {view === "live" && liveSession && (() => {

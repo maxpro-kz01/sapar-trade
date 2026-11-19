@@ -27,6 +27,10 @@ export const config = {
   // Бизнес-настройки
   defaultPriceType: env.DEFAULT_PRICE_TYPE || "Цена Прайс", // тип цен для клиентов, у которых в договоре 1С он не указан
   priceType: env.PRICE_TYPE || "",                  // тип цен 1С для «цены продажи»; пусто — самый частый тип
+  // «Магазин» (ТЗ TZ_STORE_APP): ограничения частоты, чтобы чужой номер нельзя было подбирать и спамить заказами
+  shopLoginPerMin: Number(env.SHOP_LOGIN_PER_MIN || 10),
+  shopRegisterPerHour: Number(env.SHOP_REGISTER_PER_HOUR || 5),
+  shopOrdersPerDay: Number(env.SHOP_ORDERS_PER_DAY || 20),
   overdueDays: Number(env.DEBT_OVERDUE_DAYS || 14), // долг старше N дней считается просроченным
   staleMinutes: Number(env.STALE_MINUTES || 15),    // данные старше N минут — «устарели»
 };

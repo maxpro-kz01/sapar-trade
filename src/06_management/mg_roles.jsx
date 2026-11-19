@@ -4,7 +4,7 @@
 const MG_TABS = {
   home: ["home", "Главная"], sales: ["trending-up", "Продажи"], team: ["users", "Команда"], fleet: ["map-pin", "Экспедиторы"],
   clients: ["store", "Клиенты"], stock: ["package", "Склад"], finance: ["wallet", "Финансы"], problems: ["bell", "Проблемы"],
-  tasks: ["clipboard", "Задачи"], ai: ["message-circle", "AI"], system: ["settings", "Система"],
+  tasks: ["clipboard", "Задачи"], shops: ["building", "Магазины"], ai: ["message-circle", "AI"], system: ["settings", "Система"],
 };
 
 function mgTabsFor(session) {
@@ -18,6 +18,7 @@ function mgTabsFor(session) {
     can("debts", "debts.own", "sales", "sales.own") && "clients",
     can("stock") && "stock",
     can("gross", "cash", "cash.in") && "finance",
+    can("shops") && "shops",
     "problems", "tasks", "ai",
     can("sync", "users", "audit") && "system",
   ].filter(Boolean);
