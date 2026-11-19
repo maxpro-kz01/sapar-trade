@@ -180,7 +180,7 @@ test("задачи: ставят владелец, директор и адми�
     assert.equal((await mk(a, b)).status, 201, `${a} -> ${b}`);
   for (const w of ["tp1", "sv1", "sklad", "buh"]) assert.equal((await mk(w, "tp1")).status, 403, `${w} не должен ставить задачи`);
   const seen = await api("GET", "/api/tasks", { token: tok.adm });
-  assert.ok(seen.body.some((t) => t.title === "от dir для adm") && seen.body.some((t) => t.title === "от owner для dir"), "администратор видит все задачи");
+  assert.ok(seen.body.some((t) => t.title === "от dir для adm") && !seen.body.some((t) => t.title === "от owner для dir"), "оператор видит только свои задачи (поставленные им и ему), чужие — нет");
 });
 
 test("журнал действий — владелец и директор", async () => {

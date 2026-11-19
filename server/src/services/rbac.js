@@ -10,7 +10,7 @@
 //  team / team.own — рейтинг ТП всех / своей команды; plans.edit — ввод плана продаж
 //  promos.edit — акции с подарком: создавать и менять (владелец, директор); действующие акции видят все, кто заказывает
 //  routes — маршрутные листы водителей: составить и передать водителю (владелец, директор, оператор, склад); водитель видит свой лист по fleet.send
-//  Задачи: tasks.create — ставить задачи любому сотруднику (владелец, директор, администратор); tasks.all — видеть все (те же роли).
+//  Задачи: tasks.create — ставить задачи любому сотруднику (владелец, директор, администратор); tasks.all — видеть все (владелец, директор; оператор видит только свои — поставленные им и ему).
 //  Остальные роли получают задачи, меняют статус и пишут комментарии, но сами задачи не создают.
 //  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
 //  orders.manage — менять статус (принят/собран/отгружен); shift — смены администратора; settings — настройки
@@ -28,7 +28,7 @@ export const ROLE_PERMS = {
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],
   financier:  ["sales", "debts", "cash"],
   warehouse:  ["stock", "orders.all", "orders.manage"],
-  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.all", "tasks.create", "routes"],
+  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.create", "routes"],
   driver:     ["fleet.send"],
 };
 
