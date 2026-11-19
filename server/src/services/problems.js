@@ -23,13 +23,21 @@ export async function problems(user) {
 
   if (can(user, "shops")) {
     const { rows: [n] } = await q(
-      `SELECT (SELECT count(*) FROM shops WHERE client_code IS NULL AND status = 'active') AS unlinked,
-              (SELECT count(*) FROM orders WHERE source = 'shop' AND status = 'Новый') AS fresh`);
+      `SELECT (SELECT count(*) FROM shops WHERE client_code IS NULL AND status = 'active') AS unlinked`);
     if (Number(n.unlinked) > 0) list.push({ lvl: "yellow", code: "newshops", title: `Новые магазины ждут привязки: ${n.unlinked}`, detail: "Зарегистрировались сами, их нет в 1С — привяжите к клиенту", tab: "shops" });
-    if (Number(n.fresh) > 0) list.push({ lvl: "yellow", code: "shoporders", title: `Новые заказы от магазинов: ${n.fresh}`, detail: "Магазины заказали сами — примите заказы", tab: "orders" });
   }
 
-  if (can(user, "promos.edit") || can(user, "orders.manage")) {
+  if (can(user, "orders.accept")) {
+    // оператору: свежие заказы ждут приёма; склад написал о проблеме и её ещё не отметили решённой
+    const { rows: [w] } = await q(
+      `SELECT (SELECT count(*) FROM orders WHERE status = 'Новый') AS fresh,
+              (SELECT count(*) FROM orders o WHERE o.status IN ('Принят','Собран')
+                 AND (SELECT e.event FROM order_events e WHERE e.order_id = o.id AND e.event IN ('Проблема склада','Проблема решена') ORDER BY e.id DESC LIMIT 1) = 'Проблема склада') AS probs`);
+    if (Number(w.fresh) > 0) list.push({ lvl: "yellow", code: "neworders", title: `Новые заказы ждут приёма: ${w.fresh}`, detail: "Проверьте, примите — они уйдут в 1С и на склад", tab: "orders" });
+    if (Number(w.probs) > 0) list.push({ lvl: "red", code: "wh_problem", title: `Склад сообщил о проблеме: заказов ${w.probs}`, detail: "Откройте заказ, прочитайте и решите (после этого нажмите «Решено»)", tab: "orders" });
+  }
+
+  if (can(user, "promos.edit") || can(user, "orders.manage") || can(user, "orders.pack")) {
     const { rows: [g] } = await q(
       `SELECT count(DISTINCT e.order_id) AS n FROM order_events e JOIN orders o ON o.id = e.order_id
        WHERE e.event = 'Подарок: не хватило' AND e.at > now() - interval '48 hours' AND o.status NOT IN ('Отгружен', 'Отменён')`);

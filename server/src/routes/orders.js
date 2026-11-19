@@ -27,6 +27,12 @@ r.patch("/orders/:id", ah(async (req, res) => {
   await audit(req, "order.status", req.params.id, { status: req.body?.status });
   res.json(out);
 }));
+r.post("/orders/:id/problem", ah(async (req, res) => {
+  const out = await orders.reportProblem(req.user, req.params.id, req.body?.note);
+  await audit(req, "order.problem", req.params.id);
+  res.json(out);
+}));
+r.post("/orders/:id/problem-solved", ah(async (req, res) => res.json(await orders.resolveProblem(req.user, req.params.id, req.body?.note))));
 r.post("/orders/:id/retry-1c", ah(async (req, res) => res.json(await orders.retry1c(req.user, req.params.id))));
 
 r.get("/shift", ah(async (req, res) => res.json(await shifts.currentShift(req.user))));

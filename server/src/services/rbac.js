@@ -13,22 +13,24 @@
 //  Задачи: tasks.create — ставить задачи любому сотруднику (владелец, директор, администратор); tasks.all — видеть все (владелец, директор; оператор видит только свои — поставленные им и ему).
 //  Остальные роли получают задачи, меняют статус и пишут комментарии, но сами задачи не создают.
 //  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
+//  orders.accept — принять заказ (отправить в 1С и на склад), отменить, отправить в 1С (владелец, директор, оператор);
+//  orders.pack — склад: видит только принятые и собранные заказы, отмечает «Собран», сообщает о проблеме;
 //  orders.manage — менять статус (принят/собран/отгружен); shift — смены администратора; settings — настройки
 //  fleet.send — водитель передаёт своё место в рейсе; fleet.view — карта экспедиторов и маршруты
 //  shops — «Новые магазины»: привязка к клиенту 1С, блокировка; credit — кредитный лимит «в долг» (владелец, директор)
 //  cash — остатки касс/счетов и движение денег по статьям; cash.in — только «поступило от покупателей» (директор)
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
+               "orders.create", "orders.all", "orders.manage", "orders.accept", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
   // директор — те же права, что у владельца (решение 19.11.2026). Управлять владельцем и другими директорами не может (users.js: TOP)
   director:   ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
+               "orders.create", "orders.all", "orders.manage", "orders.accept", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],
   financier:  ["sales", "debts", "cash"],
-  warehouse:  ["stock", "orders.all", "orders.manage"],
-  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.create", "routes"],
+  warehouse:  ["stock", "orders.all", "orders.pack"],
+  admin:      ["stock", "users", "orders.all", "orders.manage", "orders.accept", "shift", "settings", "shops", "tasks.create", "routes"],
   driver:     ["fleet.send"],
 };
 

@@ -81,15 +81,23 @@ test("видимость заказов: ТП — свои, админ и скл
   assert.equal(a.body.length, 1);
   assert.equal(a.body[0].items.length, 2);
   assert.equal(a.body[0].onec_status, "skip", "отправка в 1С по умолчанию выключена");
-  assert.equal((await api("GET", "/api/orders", { token: tok.sklad })).body.length, 1);
+  assert.equal((await api("GET", "/api/orders", { token: tok.sklad })).body.length, 0, "склад не видит «Новый» — только то, что оператор принял");
   assert.equal((await api("GET", "/api/orders", { token: tok.drv })).status, 403);
 });
 
 test("статусы: порядок переходов и права", async () => {
   assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.tp1, body: { status: "Принят" } })).status, 403);
   assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.adm, body: { status: "Отгружен" } })).status, 400);
+  assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.sklad, body: { status: "Принят" } })).status, 404, "склад не видит и не принимает «Новый»");
   assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.adm, body: { status: "Принят" } })).status, 200);
+  // склад: видит принятый без денег, не отменяет и не отгружает, может только «Собран»
+  const w = (await api("GET", "/api/orders", { token: tok.sklad })).body;
+  assert.equal(w.length, 1);
+  assert.equal(w[0].total, null); assert.equal(w[0].items[0].price, null); assert.equal(w[0].onec_status, null);
+  assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.sklad, body: { status: "Отменён" } })).status, 403);
+  assert.equal((await api("POST", `/api/orders/${orderId}/retry-1c`, { token: tok.sklad })).status, 403);
   assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.sklad, body: { status: "Собран" } })).status, 200);
+  assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.sklad, body: { status: "Отгружен" } })).status, 403);
   assert.equal((await api("PATCH", `/api/orders/${orderId}`, { token: tok.tp2, body: { status: "Отгружен" } })).status, 404);
 });
 
@@ -114,12 +122,15 @@ test("очередь для 1С: агент забирает, сообщает �
   assert.equal(o.onec_number, "ЗП-000777");
 
   const r2 = await api("POST", "/api/orders", { token: tok.tp2, body: { clientCode: "К-003", items: [{ code: "00003", qty: 5 }] } });
+  assert.equal((await api("GET", "/api/sync/1c/orders/pending", { agent: true })).body.length, 0, "новый заказ в 1С не уходит, пока оператор не принял");
+  assert.equal((await api("PATCH", `/api/orders/${r2.body.id}`, { token: tok.adm, body: { status: "Принят" } })).status, 200);
+  assert.equal((await api("GET", "/api/sync/1c/orders/pending", { agent: true })).body.length, 1, "«Принять» — и заказ ушёл в очередь 1С");
   await api("POST", `/api/sync/1c/orders/${r2.body.id}/result`, { agent: true, body: { ok: false, error: "Не заполнен склад" } });
   assert.equal((await api("POST", `/api/orders/${r2.body.id}/retry-1c`, { token: tok.tp2 })).status, 403);
   assert.equal((await api("POST", `/api/orders/${r2.body.id}/retry-1c`, { token: tok.adm })).status, 200);
   assert.equal((await api("GET", "/api/sync/1c/orders/pending", { agent: true })).body.length, 1);
-  // ТП отменяет свой новый заказ — в 1С его больше не отправляем
-  assert.equal((await api("PATCH", `/api/orders/${r2.body.id}`, { token: tok.tp2, body: { status: "Отменён" } })).status, 200);
+  // оператор отменяет заказ — в 1С его больше не отправляем
+  assert.equal((await api("PATCH", `/api/orders/${r2.body.id}`, { token: tok.adm, body: { status: "Отменён" } })).status, 200);
   assert.equal((await api("GET", "/api/sync/1c/orders/pending", { agent: true })).body.length, 0);
 });
 
@@ -153,4 +164,18 @@ test("настройки: телефон директора", async () => {
   assert.equal(s.status, 200);
   assert.equal(s.body.directorPhone, "+7 701 234 56 78");
   assert.equal((await api("PUT", "/api/settings", { token: tok.tp1, body: { directorPhone: "77012345678" } })).status, 403);
+});
+
+test("проблема склада: склад пишет, оператор видит в «Проблемах» и отмечает «Решено»", async () => {
+  const r = await api("POST", "/api/orders", { token: tok.tp1, body: { clientCode: "К-001", items: [{ code: "00001", qty: 1 }] } });
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem`, { token: tok.sklad, body: { note: "нет муки" } })).status, 404, "«Новый» склад не видит");
+  await api("PATCH", `/api/orders/${r.body.id}`, { token: tok.adm, body: { status: "Принят" } });
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem`, { token: tok.sklad, body: { note: "  " } })).status, 400);
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem`, { token: tok.tp1, body: { note: "x" } })).status, 403);
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem`, { token: tok.sklad, body: { note: "нет муки" } })).status, 200);
+  const pr = (await api("GET", "/api/problems", { token: tok.adm })).body.items;
+  assert.ok(pr.some((x) => x.code === "wh_problem"), "оператор видит проблему склада");
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem-solved`, { token: tok.sklad, body: {} })).status, 403);
+  assert.equal((await api("POST", `/api/orders/${r.body.id}/problem-solved`, { token: tok.adm, body: {} })).status, 200);
+  assert.ok(!(await api("GET", "/api/problems", { token: tok.adm })).body.items.some((x) => x.code === "wh_problem"), "после «Решено» проблема исчезла");
 });

@@ -207,7 +207,7 @@ test("блокировка выкидывает магазин сразу", asyn
 test("«Проблемы»: новые магазины и заказы видят те, у кого есть право", async () => {
   const p = await api("GET", "/api/problems", { token: tok.owner });
   assert.equal(p.status, 200, p.raw);
-  assert.ok(JSON.stringify(p.body).includes("shoporders"));
+  assert.ok(JSON.stringify(p.body).includes("neworders"));
   const tp = await api("GET", "/api/problems", { token: tok.tp1 });
   assert.equal(JSON.stringify(tp.body).includes("newshops"), false);
 });

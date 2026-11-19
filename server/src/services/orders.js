@@ -11,8 +11,16 @@ export const ORDER_STATUSES = ["Новый", "Принят", "Собран", "О
 const NEXT = { "Новый": ["Принят", "Отменён"], "Принят": ["Собран", "Отменён"], "Собран": ["Отгружен", "Отменён"], "Отгружен": [], "Отменён": [] };
 export const orderNumber = (id) => "СТ-" + String(id).padStart(6, "0");
 
+// Склад (orders.pack без orders.accept) видит только то, что оператор принял и отправил ему на сборку
+const WAREHOUSE_SEES = ["Принят", "Собран"];
+const isPackOnly = (user) => can(user, "orders.pack") && !can(user, "orders.accept");
+
 function scopeWhere(user, params) {
-  if (can(user, "orders.all")) return "true";
+  if (can(user, "orders.all")) {
+    if (!isPackOnly(user)) return "true";
+    params.push(WAREHOUSE_SEES);
+    return `o.status = ANY($${params.length}::text[])`;
+  }
   if (!can(user, "orders.own")) throw new HttpError(403, "Нет доступа");
   params.push(user.id, managersOf(user));
   return `(o.created_by = $${params.length - 1} OR o.manager = ANY($${params.length}::text[]))`;
@@ -47,8 +55,8 @@ export async function createOrder(user, b) {
   });
   const total = round2(lines.reduce((a, l) => a + l.sum, 0));
   const gifts = await giftsFor(lines); // акции: подарок идёт отдельной строкой с ценой 0 и в сумму не входит
-  // пока отправка в 1С выключена в настройках — заказ в 1С не уходит (и не уйдёт пачкой при включении)
-  const onec = (await getSettings()).onecOrders ? "pending" : "skip";
+  // в 1С заказ уходит, когда оператор нажмёт «Принять» (setStatus) — до этого он ждёт проверки
+  const onec = "skip";
   return tx(async (c) => {
     const { rows: [o] } = await c.query(
       `INSERT INTO orders(client_code, client_name, manager, created_by, comment, delivery_date, price_type, total, onec_status)
@@ -78,6 +86,9 @@ export async function listOrders(user, { status, from, to, limit } = {}) {
              FROM order_events e LEFT JOIN users eu ON eu.id = e.user_id WHERE e.order_id = o.id) AS events
      FROM orders o LEFT JOIN users u ON u.id = o.created_by
      WHERE ${where} ORDER BY o.id DESC LIMIT ${n}`, p);
+  if (isPackOnly(user)) // складу деньги и 1С не нужны: только что собрать
+    return rows.map((o) => ({ ...o, number: orderNumber(o.id), total: null, payment: null, price_type: null, onec_status: null, onec_number: null, onec_error: null,
+      items: (o.items || []).map((i) => ({ ...i, price: null, sum: null })) }));
   return rows.map((o) => ({ ...o, number: orderNumber(o.id) }));
 }
 
@@ -93,21 +104,43 @@ export async function setStatus(user, id, status, note) {
   const o = await getVisible(user, id);
   if (!ORDER_STATUSES.includes(status)) throw new HttpError(400, "Неверный статус");
   const ownCancel = status === "Отменён" && o.status === "Новый" && o.created_by === user.id;
-  if (!can(user, "orders.manage") && !ownCancel) throw new HttpError(403, "Нет доступа");
+  // принять, отменить, отгрузить — оператор/директор/владелец; склад — только «Принят → Собран»
+  const allowed = can(user, "orders.accept") || (status === "Собран" && can(user, "orders.pack")) || ownCancel;
+  if (!allowed) throw new HttpError(403, "Нет доступа");
   if (!NEXT[o.status].includes(status)) throw new HttpError(400, `Нельзя перевести заказ из «${o.status}» в «${status}»`);
   let extra = note ? String(note).slice(0, 500) : null;
   await tx(async (c) => {
     // отменён до отправки в 1С — в 1С не отправляем; уже в 1С — напоминаем отменить там вручную
-    const onec = status === "Отменён" && o.onec_status !== "sent" ? ", onec_status = 'skip'" : "";
+    let onec = status === "Отменён" && o.onec_status !== "sent" ? ", onec_status = 'skip'" : "";
     if (status === "Отменён" && o.onec_status === "sent") extra = `Отмените заказ ${o.onec_number || ""} в 1С вручную` + (extra ? ". " + extra : "");
+    // «Принят» — заказ уходит в 1С (если отправка включена и клиент есть в 1С)
+    if (status === "Принят" && o.onec_status === "skip" && !String(o.client_code).startsWith("NEW-") && (await getSettings()).onecOrders) onec = ", onec_status = 'pending'";
     await c.query(`UPDATE orders SET status = $2, updated_at = now()${onec} WHERE id = $1`, [o.id, status]);
     await c.query("INSERT INTO order_events(order_id, user_id, event, note) VALUES ($1,$2,$3,$4)", [o.id, user.id, status, extra]);
   });
   return { ok: true, note: extra };
 }
 
+// Склад нашёл проблему (нехватка, брак) — оператор видит её в «Проблемах» и у заказа; он же отмечает «решено»
+export async function reportProblem(user, id, note) {
+  if (!can(user, "orders.pack") && !can(user, "orders.accept")) throw new HttpError(403, "Нет доступа");
+  const o = await getVisible(user, id);
+  if (!["Принят", "Собран"].includes(o.status)) throw new HttpError(400, "Проблему можно записать по принятому заказу");
+  const text = String(note || "").trim().slice(0, 500);
+  if (!text) throw new HttpError(400, "Опишите проблему");
+  await q("INSERT INTO order_events(order_id, user_id, event, note) VALUES ($1,$2,'Проблема склада',$3)", [o.id, user.id, text]);
+  return { ok: true };
+}
+
+export async function resolveProblem(user, id, note) {
+  if (!can(user, "orders.accept")) throw new HttpError(403, "Нет доступа");
+  const o = await getVisible(user, id);
+  await q("INSERT INTO order_events(order_id, user_id, event, note) VALUES ($1,$2,'Проблема решена',$3)", [o.id, user.id, note ? String(note).slice(0, 500) : null]);
+  return { ok: true };
+}
+
 export async function retry1c(user, id) {
-  if (!can(user, "orders.manage")) throw new HttpError(403, "Нет доступа");
+  if (!can(user, "orders.accept")) throw new HttpError(403, "Нет доступа");
   const o = await getVisible(user, id);
   if (!["error", "skip"].includes(o.onec_status)) throw new HttpError(400, "Заказ уже отправлен в 1С или ждёт отправки");
   if (!(await getSettings()).onecOrders) throw new HttpError(400, "Отправка заказов в 1С выключена в настройках");
