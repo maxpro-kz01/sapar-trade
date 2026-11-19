@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="69da95dc53ca" />
+<meta name="st-build" content="9035c3fae3c9" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -6431,6 +6431,7 @@ const MG_TABS = {
   finance: ["wallet", "Финансы"],
   problems: ["bell", "Проблемы"],
   tasks: ["clipboard", "Задачи"],
+  orders: ["clipboard", "Заказы"],
   shops: ["building", "Магазины"],
   routes: ["map-pin", "Маршруты"],
   promos: ["gift", "Акции"],
@@ -6440,7 +6441,7 @@ const MG_TABS = {
 function mgTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
   const role = session.user.role;
-  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("stock") && "stock", can("gross", "cash", "cash.in") && "finance", can("shops") && "shops", can("routes", "cash", "cash.in") && "routes", can("promos.edit") && "promos", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
+  return ["home", can("sales", "sales.own") && "sales", can("team", "team.own") && "team", can("fleet.view") && "fleet", can("debts", "debts.own", "sales", "sales.own") && "clients", can("orders.pack") && "orders", can("stock") && "stock", can("gross", "cash", "cash.in") && "finance", can("shops") && "shops", can("routes", "cash", "cash.in") && "routes", can("promos.edit") && "promos", "problems", "tasks", "ai", can("sync", "users", "audit") && "system"].filter(Boolean);
 }
 const MG_PERIOD_TABS = ["home", "sales", "team", "clients", "finance"];
 const MgCard = ({
@@ -9026,7 +9027,7 @@ function MgmtApp({
     key: JSON.stringify(param)
   }, p)), tab === "stock" && React.createElement(MgStock, _extends({
     key: JSON.stringify(param)
-  }, p)), tab === "finance" && React.createElement(MgFinance, p), tab === "problems" && React.createElement(MgProblems, p), tab === "routes" && React.createElement(AdminRoutes, p), tab === "promos" && React.createElement(AdminPromos, p), tab === "tasks" && React.createElement(MgTasks, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "ai" && React.createElement(MgAI, p), tab === "system" && React.createElement(MgSystem, p)), React.createElement(AppNav, {
+  }, p)), tab === "finance" && React.createElement(MgFinance, p), tab === "problems" && React.createElement(MgProblems, p), tab === "routes" && React.createElement(AdminRoutes, p), tab === "promos" && React.createElement(AdminPromos, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "tasks" && React.createElement(MgTasks, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "ai" && React.createElement(MgAI, p), tab === "system" && React.createElement(MgSystem, p)), React.createElement(AppNav, {
     items: tabs.map(id => ({
       id,
       icon: MG_TABS[id][0],

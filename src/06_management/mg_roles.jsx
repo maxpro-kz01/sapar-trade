@@ -4,7 +4,7 @@
 const MG_TABS = {
   home: ["home", "Главная"], sales: ["trending-up", "Продажи"], team: ["users", "Команда"], fleet: ["map-pin", "Экспедиторы"],
   clients: ["store", "Клиенты"], stock: ["package", "Склад"], finance: ["wallet", "Финансы"], problems: ["bell", "Проблемы"],
-  tasks: ["clipboard", "Задачи"], shops: ["building", "Магазины"], routes: ["map-pin", "Маршруты"], promos: ["gift", "Акции"], ai: ["message-circle", "AI"], system: ["settings", "Система"],
+  tasks: ["clipboard", "Задачи"], orders: ["clipboard", "Заказы"], shops: ["building", "Магазины"], routes: ["map-pin", "Маршруты"], promos: ["gift", "Акции"], ai: ["message-circle", "AI"], system: ["settings", "Система"],
 };
 
 function mgTabsFor(session) {
@@ -16,6 +16,7 @@ function mgTabsFor(session) {
     can("team", "team.own") && "team",
     can("fleet.view") && "fleet",
     can("debts", "debts.own", "sales", "sales.own") && "clients",
+    can("orders.pack") && "orders", // склад: заказы к сборке (принятые оператором)
     can("stock") && "stock",
     can("gross", "cash", "cash.in") && "finance",
     can("shops") && "shops",
