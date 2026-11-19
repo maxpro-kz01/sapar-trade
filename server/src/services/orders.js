@@ -5,6 +5,7 @@ import { can, managersOf } from "./rbac.js";
 import { HttpError, isIsoDate } from "../lib/http.js";
 import { priceTypeFor, round2 } from "./scope.js";
 import { getSettings } from "./settings.js";
+import { giftsFor, saveGifts, giftSummary } from "./promos.js";
 
 export const ORDER_STATUSES = ["Новый", "Принят", "Собран", "Отгружен", "Отменён"];
 const NEXT = { "Новый": ["Принят", "Отменён"], "Принят": ["Собран", "Отменён"], "Собран": ["Отгружен", "Отменён"], "Отгружен": [], "Отменён": [] };
@@ -45,6 +46,7 @@ export async function createOrder(user, b) {
     return { line: i + 1, code, name: p.name, unit: p.unit, qty, price: p.price, sum: round2(qty * p.price) };
   });
   const total = round2(lines.reduce((a, l) => a + l.sum, 0));
+  const gifts = await giftsFor(lines); // акции: подарок идёт отдельной строкой с ценой 0 и в сумму не входит
   // пока отправка в 1С выключена в настройках — заказ в 1С не уходит (и не уйдёт пачкой при включении)
   const onec = (await getSettings()).onecOrders ? "pending" : "skip";
   return tx(async (c) => {
@@ -56,7 +58,8 @@ export async function createOrder(user, b) {
       await c.query("INSERT INTO order_items(order_id, line, product_code, name, unit, qty, price, sum) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         [o.id, l.line, l.code, l.name, l.unit, l.qty, l.price, l.sum]);
     await c.query("INSERT INTO order_events(order_id, user_id, event) VALUES ($1,$2,'Создан')", [o.id, user.id]);
-    return { id: o.id, number: orderNumber(o.id), total, lines: lines.length };
+    await saveGifts(c, o.id, user.id, lines.length + 1, gifts);
+    return { id: o.id, number: orderNumber(o.id), total, lines: lines.length, gifts: giftSummary(gifts) };
   });
 }
 
@@ -69,7 +72,7 @@ export async function listOrders(user, { status, from, to, limit } = {}) {
   const n = Math.min(Math.max(Number(limit) || 200, 1), 1000);
   const { rows } = await q(
     `SELECT o.*, coalesce(u.name, CASE WHEN o.source = 'shop' THEN 'Магазин' END) AS creator,
-            (SELECT json_agg(json_build_object('code', i.product_code, 'name', i.name, 'unit', i.unit, 'qty', i.qty, 'price', i.price, 'sum', i.sum) ORDER BY i.line)
+            (SELECT json_agg(json_build_object('code', i.product_code, 'name', i.name, 'unit', i.unit, 'qty', i.qty, 'price', i.price, 'sum', i.sum, 'gift', i.is_gift) ORDER BY i.line)
              FROM order_items i WHERE i.order_id = o.id) AS items,
             (SELECT json_agg(json_build_object('at', e.at, 'event', e.event, 'note', e.note, 'user', eu.name) ORDER BY e.id)
              FROM order_events e LEFT JOIN users eu ON eu.id = e.user_id WHERE e.order_id = o.id) AS events

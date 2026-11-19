@@ -11,6 +11,7 @@ import orderRoutes from "./routes/orders.js";
 import shopRoutes from "./routes/shop.js";
 import shopsAdminRoutes from "./routes/shops_admin.js";
 import routesRoutes from "./routes/routes.js";
+import promosRoutes from "./routes/promos.js";
 import fleetRoutes, { traccarRoutes } from "./routes/fleet.js";
 
 export function createApp() {
@@ -39,6 +40,7 @@ export function createApp() {
   app.use("/api", reportRoutes);
   app.use("/api", mgmtRoutes);
   app.use("/api", routesRoutes);
+  app.use("/api", promosRoutes);
   app.use("/api", orderRoutes);
   app.use("/api/fleet", fleetRoutes);
 

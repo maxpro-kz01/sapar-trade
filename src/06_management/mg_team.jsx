@@ -65,6 +65,17 @@ function MgPlanModal({ session, authLost, onClose, onSaved }) {
   const [vals, setVals] = useState({});
   const [err, setErr] = useState("");
   useEffect(() => { if (r.data) setVals(Object.fromEntries(r.data.items.map((x) => [x.manager, x.amount ? String(Math.round(x.amount)) : ""]))); }, [r.data]);
+  const [same, setSame] = useState("");
+  const fillSame = () => Number(String(same).replace(/\s/g, "")) > 0 && setVals(Object.fromEntries((r.data ? r.data.items : []).map((x) => [x.manager, String(Number(String(same).replace(/\s/g, "")))])));
+  const copyPrev = async () => {
+    setErr("");
+    const d = new Date(month + "-01T00:00:00"); d.setMonth(d.getMonth() - 1);
+    const prev = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    try {
+      const pr = await stApi("/api/plans?month=" + prev, { token: session.token });
+      setVals(Object.fromEntries(pr.items.map((x) => [x.manager, x.amount ? String(Math.round(x.amount)) : ""])));
+    } catch (e) { setErr(e.message); }
+  };
   const total = Object.values(vals).reduce((a, v) => a + (Number(String(v).replace(/\s/g, "")) || 0), 0);
   const save = async () => {
     setErr("");
@@ -77,6 +88,17 @@ function MgPlanModal({ session, authLost, onClose, onSaved }) {
       <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Месяц</label>
       <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-full px-3 py-2.5 rounded-xl mb-3 mt-1 font-mono-kz" style={{ border: "1.5px solid var(--line)", fontSize: 14 }} />
       <LiveState {...r} onRetry={r.reload} empty={r.data && !r.data.items.length ? "Нет ТП: в 1С у клиентов не указан основной менеджер" : null} />
+      {r.data && r.data.items.length > 0 && (
+        <div className="rounded-2xl p-3 mb-3" style={{ background: "#F7F7FB", border: "1px solid var(--line)" }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>Быстрый ввод</p>
+          <div className="flex items-center gap-2 mb-2">
+            <input inputMode="numeric" value={same} placeholder="Сумма для всех" onChange={(e) => setSame(e.target.value.replace(/[^\d\s]/g, ""))}
+              className="font-mono-kz px-3 py-2 rounded-xl text-right flex-1" style={{ border: "1.5px solid var(--line)", fontSize: 13, minWidth: 0 }} />
+            <GhostButton small onClick={fillSame}>Всем одинаково</GhostButton>
+          </div>
+          <GhostButton small onClick={copyPrev}>Скопировать с прошлого месяца</GhostButton>
+        </div>
+      )}
       {r.data && r.data.items.map((x) => (
         <div key={x.manager} className="flex items-center gap-2 mb-2">
           <span className="flex-1" style={{ fontSize: 13, fontWeight: 600 }}>{x.manager}</span>

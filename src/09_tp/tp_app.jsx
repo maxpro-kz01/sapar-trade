@@ -40,7 +40,7 @@ function TpApp({ session, setSession, onExit }) {
         {tab === "stores" && store && <TpOrder {...p} store={store} catalog={catalog} cart={cartOf(store.code)} setCart={setCartOf(store.code)}
           onBack={() => history.back()} onDone={() => { setCartOf(store.code)({}); setTab("orders"); }} />}
         {tab === "orders" && <OrdersBoard {...p} defaultFilter="all" />}
-        {tab === "plan" && <MgTeam {...p} range={{ from: t.slice(0, 8) + "01", to: t }} />}
+        {tab === "plan" && <MyPlan {...p} />}
       </div>
       <AppNav items={Object.entries(TP_TABS).map(([id, [icon, label]]) => ({ id, icon, label }))} active={store ? "stores" : tab} onPick={pick} spread
         brand={<NavBrand title="Sapar Trade" sub="Торговый представитель" />} />

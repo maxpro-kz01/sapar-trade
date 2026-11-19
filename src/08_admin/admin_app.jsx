@@ -1,11 +1,11 @@
 // Sapar Trade — администратор. Модуль: оболочка админ-панели на реальных данных (вход по личному логину)
 // Разделы по правам: Смена, Заказы, Склад (1С), Сотрудники, Настройки. Реклама/Истории/CRM — вернутся с приложением для магазинов.
 
-const ADMIN_TABS = { shift: ["power", "Смена"], orders: ["clipboard", "Заказы"], stock: ["package", "Склад"], staff: ["users", "Сотрудники"], shops: ["building", "Магазины"], routes: ["map-pin", "Маршруты"], tasks: ["clipboard", "Задачи"], settings: ["settings", "Настройки"] };
+const ADMIN_TABS = { shift: ["power", "Смена"], orders: ["clipboard", "Заказы"], stock: ["package", "Склад"], staff: ["users", "Сотрудники"], shops: ["building", "Магазины"], routes: ["map-pin", "Маршруты"], promos: ["gift", "Акции"], tasks: ["clipboard", "Задачи"], settings: ["settings", "Настройки"] };
 
 function adminTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
-  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("routes", "cash", "cash.in") && "routes", can("tasks.all", "tasks.create") && "tasks", can("settings") && "settings"].filter(Boolean);
+  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("routes", "cash", "cash.in") && "routes", can("promos.edit") && "promos", can("tasks.all", "tasks.create") && "tasks", can("settings") && "settings"].filter(Boolean);
 }
 
 function AdminLiveApp({ session, setSession, onExit }) {
@@ -36,6 +36,7 @@ function AdminLiveApp({ session, setSession, onExit }) {
         {tab === "staff" && <LiveUsers {...p} />}
         {tab === "shops" && <AdminShopsLive {...p} />}
         {tab === "routes" && <AdminRoutes {...p} />}
+        {tab === "promos" && <AdminPromos {...p} />}
         {tab === "tasks" && <MgTasks {...p} />}
         {tab === "settings" && <AdminSettingsLive {...p} />}
       </div>

@@ -3,6 +3,7 @@ import { q } from "../db/pool.js";
 import { can } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
 import { priceTypeFor, freshness } from "./scope.js";
+import { activePromos } from "./promos.js";
 
 export async function catalog(user, clientCode) {
   if (!can(user, "orders.create") && !can(user, "stock") && !can(user, "orders.all")) throw new HttpError(403, "Нет доступа");
@@ -17,5 +18,5 @@ export async function catalog(user, clientCode) {
      ORDER BY grp, pr.name`, [pt]);
   const groups = [...new Set(rows.map((r) => r.grp))];
   const noPrice = rows.filter((r) => !(Number(r.price) > 0) && Number(r.stock) > 0).length; // есть на складе, но цены этого типа нет
-  return { priceType: pt, noPrice, groups, items: rows, ...(await freshness()) };
+  return { priceType: pt, noPrice, groups, items: rows, promos: await activePromos(), ...(await freshness()) };
 }

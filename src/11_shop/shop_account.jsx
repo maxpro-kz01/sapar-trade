@@ -33,8 +33,8 @@ function ShopOrders({ onAuthLost, toast }) {
               <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--line)" }}>
                 {(x.items || []).map((i, n) => (
                   <div key={n} className="flex justify-between py-1" style={{ fontSize: 12.5 }}>
-                    <span className="flex-1 pr-2">{i.name} <span style={{ color: "var(--muted)" }}>× {stNum(i.qty)}</span></span>
-                    <span className="font-mono-kz">{stMoney(i.sum)}</span>
+                    <span className="flex-1 pr-2" style={i.gift ? { color: "#127A33", fontWeight: 700 } : undefined}>{i.name} <span style={{ color: "var(--muted)" }}>× {stNum(i.qty)}</span></span>
+                    <span className="font-mono-kz" style={i.gift ? { color: "#127A33", fontWeight: 700 } : undefined}>{i.gift ? "подарок" : stMoney(i.sum)}</span>
                   </div>
                 ))}
                 {x.comment && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Комментарий: {x.comment}</p>}

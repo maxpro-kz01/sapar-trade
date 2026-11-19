@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { ah, period } from "../lib/http.js";
 import { requireAuth, requirePerm } from "../middleware/auth.js";
-import { team, getPlans, savePlans } from "../services/team.js";
+import { team, getPlans, savePlans, myPlan } from "../services/team.js";
 import { finance } from "../services/reports.js";
 import { money, listArticles, setArticleGroup } from "../services/money.js";
 import { problems } from "../services/problems.js";
@@ -24,6 +24,7 @@ r.put("/cf-articles", ah(async (req, res) => {
 }));
 r.get("/problems", ah(async (req, res) => res.json(await problems(req.user))));
 
+r.get("/my-plan", ah(async (req, res) => res.json(await myPlan(req.user, req.query.manager ? String(req.query.manager) : null))));
 r.get("/plans", ah(async (req, res) => res.json(await getPlans(req.user, req.query.month))));
 r.put("/plans", ah(async (req, res) => {
   const out = await savePlans(req.user, req.body?.month, req.body?.items);

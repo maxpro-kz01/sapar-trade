@@ -67,8 +67,8 @@ function OrdersBoard({ session, authLost, showToast, defaultFilter = "new", titl
               {open === o.id && (
                 <div className="mt-2 pt-2" style={{ borderTop: "1px dashed var(--line)" }}>
                   {(o.items || []).map((it, i) => (
-                    <div key={i} className="flex justify-between gap-2 py-1" style={{ fontSize: 12.5 }}>
-                      <span className="flex-1">{it.name}</span>
+                    <div key={i} className="flex justify-between gap-2 py-1" style={{ fontSize: 12.5, ...(it.gift ? { background: "#E3F5E9", color: "#127A33", fontWeight: 700, borderRadius: 8, padding: "4px 6px" } : null) }}>
+                      <span className="flex-1">{it.gift ? <Ico name="gift" size={12} color="#127A33" style={{ display: "inline", marginRight: 4 }} /> : null}{it.name}</span>
                       <span className="font-mono-kz" style={{ color: "var(--muted)" }}>{stNum(it.qty)} {it.unit || ""} × {stNum(it.price)}</span>
                       <span className="font-mono-kz" style={{ fontWeight: 700, minWidth: 90, textAlign: "right" }}>{stMoney(it.sum)}</span>
                     </div>

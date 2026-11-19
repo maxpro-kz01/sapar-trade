@@ -7,6 +7,7 @@ import { priceTypeFor, priceType, round2, freshness, overdueDate, overdueSql } f
 import { getSettings } from "./settings.js";
 import { orderNumber } from "./orders.js";
 import { creditInfo, assertCanBuyOnCredit } from "./credit.js";
+import { activePromos, giftsFor, saveGifts, giftSummary } from "./promos.js";
 
 // Какой тип цен у магазина: у привязанного — из договора 1С, у нового — из настройки «Прайс для новых магазинов» (по умолчанию «Рынок»).
 // fb — запасной: берём, когда у товара нет цены своего типа (в каталоге и в заказе правило одно).
@@ -35,7 +36,7 @@ export async function shopCatalog(shop) {
      WHERE coalesce(NULLIF(p.price, 0), f.price) > 0
      ORDER BY grp, pr.name`, [pt, fb]);
   const items = rows.map((r) => ({ code: r.code, name: r.name, group: r.grp, unit: r.unit, price: Number(r.price), inStock: r.in_stock }));
-  return { groups: [...new Set(items.map((i) => i.group))], items, ...(await freshness()) };
+  return { groups: [...new Set(items.map((i) => i.group))], items, promos: await activePromos(), ...(await freshness()) };
 }
 
 export async function createShopOrder(shop, b) {
@@ -68,6 +69,7 @@ export async function createShopOrder(shop, b) {
     return { line: i + 1, code, name: p.name, unit: p.unit, qty, price: p.price, sum: round2(qty * p.price) };
   });
   const total = round2(lines.reduce((a, l) => a + l.sum, 0));
+  const gifts = await giftsFor(lines); // акции: подарок отдельной строкой с ценой 0
   const max = Number((await getSettings()).shopMaxOrder) || 0;
   if (max > 0 && total > max) throw new HttpError(400, `Заказ больше ${Math.round(max).toLocaleString("ru-RU")} ₸ — оформите через менеджера`);
   if (payment === "debt") await assertCanBuyOnCredit(shop.client_code, total);
@@ -84,14 +86,15 @@ export async function createShopOrder(shop, b) {
       await c.query("INSERT INTO order_items(order_id, line, product_code, name, unit, qty, price, sum) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
         [o.id, l.line, l.code, l.name, l.unit, l.qty, l.price, l.sum]);
     await c.query("INSERT INTO order_events(order_id, event, note) VALUES ($1,'Создан магазином',$2)", [o.id, PAYMENT_NAMES[payment]]);
-    return { id: o.id, number: orderNumber(o.id), total, lines: lines.length, payment };
+    await saveGifts(c, o.id, null, lines.length + 1, gifts);
+    return { id: o.id, number: orderNumber(o.id), total, lines: lines.length, payment, gifts: giftSummary(gifts) };
   });
 }
 
 export async function listShopOrders(shop) {
   const { rows } = await q(
     `SELECT o.id, o.status, o.total, o.payment, o.comment, o.delivery_date, o.created_at,
-            (SELECT json_agg(json_build_object('name', i.name, 'unit', i.unit, 'qty', i.qty, 'price', i.price, 'sum', i.sum) ORDER BY i.line)
+            (SELECT json_agg(json_build_object('name', i.name, 'unit', i.unit, 'qty', i.qty, 'price', i.price, 'sum', i.sum, 'gift', i.is_gift) ORDER BY i.line)
              FROM order_items i WHERE i.order_id = o.id) AS items
      FROM orders o WHERE o.shop_id = $1 ORDER BY o.id DESC LIMIT 100`, [shop.id]);
   return rows.map((o) => ({ ...o, number: orderNumber(o.id), total: Number(o.total) }));

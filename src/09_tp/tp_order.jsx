@@ -16,12 +16,16 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
   const shown = items.filter((x) => (!grp || x.grp === grp) && (!needle || x.name.toLowerCase().includes(needle) || (x.sku || "").toLowerCase().includes(needle))).slice(0, 150);
   const lines = Object.entries(cart).filter(([, n]) => n > 0).map(([code, n]) => ({ ...byCode[code], qty: n, sum: n * (byCode[code].price || 0) }));
   const total = lines.reduce((a, l) => a + l.sum, 0);
+  const promos = catalog.data.promos || [];
+  const promosOf = (code) => promos.filter((p) => p.buyCode === code);
+  const gifts = promoGiftsFor(promos, (code) => cart[code]);
   const setQty = (code, n) => setCart((c) => ({ ...c, [code]: Math.max(0, Math.round(n * 1000) / 1000) }));
   const send = async () => {
     setBusy(true);
     try {
       const res = await stApi("/api/orders", { method: "POST", token: session.token, body: { clientCode: store.code, items: lines.map((l) => ({ code: l.code, qty: l.qty })), comment, deliveryDate: delivery } });
-      showToast(`Заказ ${res.number} отправлен · ${stMoney(res.total)}`);
+      const g = (res.gifts || []).map((x) => x.name + " × " + x.qty).join(", ");
+      showToast(`Заказ ${res.number} отправлен · ${stMoney(res.total)}` + (g ? " · подарок: " + g : ""));
       onDone();
     } catch (e) { showToast(e.message); }
     setBusy(false);
@@ -35,6 +39,12 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
         <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 2 }}>Цены: «{catalog.data.priceType}» (по договору магазина) · остатки из 1С</p>
         {catalog.data.noPrice > 0 && <p style={{ fontSize: 10.5, color: "#B7791F", marginTop: 2 }}>Без цены этого типа: {catalog.data.noPrice} поз. с остатком — заказать нельзя, цену нужно внести в 1С</p>}
       </MgCard>
+      {promos.length > 0 && (
+        <div className="rounded-2xl p-3 mb-3" style={{ background: "#FFF6DE", border: "1px solid #F1DCA0" }}>
+          <p className="flex items-center gap-1.5" style={{ fontSize: 12, fontWeight: 800, color: "#8A5A00" }}><Ico name="gift" size={14} color="#8A5A00" />Акции</p>
+          {promos.map((p) => <p key={p.id} style={{ fontSize: 12, marginTop: 3 }}><b>{p.title}</b> — {p.label}: {p.giftName} × {p.giftQty}{p.dateTo ? " (до " + stFmtDate(p.dateTo) + ")" : ""}</p>)}
+        </div>
+      )}
       <LiveSearch value={q} onChange={setQ} placeholder="Поиск товара" />
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
         <LiveChip on={!grp} onClick={() => setGrp("")}>Все</LiveChip>
@@ -48,6 +58,7 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
             <div key={x.code} className="flex items-center gap-2 py-2" style={{ borderBottom: "1px solid var(--line)", opacity: noPrice ? 0.5 : 1 }}>
               <div className="flex-1 min-w-0">
                 <p style={{ fontSize: 12.5, fontWeight: 700 }}>{x.name}</p>
+                {promosOf(x.code).map((p) => <div key={p.id}><PromoTag p={p} n={n} /></div>)}
                 <p className="font-mono-kz" style={{ fontSize: 11, color: "var(--muted)" }}>
                   {noPrice ? "нет цены «" + catalog.data.priceType + "»" : stMoney(x.price)} · остаток <span style={{ color: x.stock > 0 ? "var(--muted)" : "var(--red)" }}>{stNum(x.stock)} {x.unit || ""}</span>
                 </p>
@@ -83,6 +94,7 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
               <span className="font-mono-kz" style={{ fontWeight: 700, minWidth: 90, textAlign: "right" }}>{stMoney(l.sum)}</span>
             </div>
           ))}
+          {gifts.map((p) => <GiftLine key={p.id} name={p.giftName} qty={p.giftQty} unit={p.giftUnit} title={p.title} />)}
           <MgRow l="Итого" v={stMoney(total)} strong />
           <div className="mt-3" />
           <Field label="Доставка" type="date" value={delivery} onChange={(e) => setDelivery(e.target.value)} />

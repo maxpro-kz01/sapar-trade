@@ -47,7 +47,7 @@ function StaffGate({ onCancel, onPick }) {
           <div className="rounded-xl p-2.5" style={{ background: "var(--navy)" }}><Ico name="bar-chart" size={18} color="#fff" /></div>
           <div className="flex-1 text-left">
             <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Система управления</p>
-            <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Данные из 1С · личный логин и пароль</p>
+            <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Владелец, директор, склад, бухгалтер, финансист</p>
           </div>
           <Ico name="arrow-left" size={16} color="var(--navy)" style={{ transform: "rotate(180deg)" }} />
         </button>

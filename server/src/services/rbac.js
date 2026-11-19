@@ -8,6 +8,7 @@
 //  sync       — статус и журнал интеграции; users — управление пользователями; audit — журнал действий
 
 //  team / team.own — рейтинг ТП всех / своей команды; plans.edit — ввод плана продаж
+//  promos.edit — акции с подарком: создавать и менять (владелец, директор); действующие акции видят все, кто заказывает
 //  routes — маршрутные листы водителей: составить и передать водителю (владелец, директор, оператор, склад); водитель видит свой лист по fleet.send
 //  Задачи: tasks.create — ставить задачи любому сотруднику (владелец, директор, администратор); tasks.all — видеть все (те же роли).
 //  Остальные роли получают задачи, меняют статус и пишут комментарии, но сами задачи не создают.
@@ -18,10 +19,10 @@
 //  cash — остатки касс/счетов и движение денег по статьям; cash.in — только «поступило от покупателей» (директор)
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
   // директор — те же права, что у владельца (решение 19.11.2026). Управлять владельцем и другими директорами не может (users.js: TOP)
   director:   ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes", "promos.edit"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],

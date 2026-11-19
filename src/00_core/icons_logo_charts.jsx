@@ -15,6 +15,7 @@ function Ico({ name, size = 18, color = "currentColor", strokeWidth = 2, style }
     clipboard: <><rect x="6" y="4" width="12" height="16" rx="2"/><rect x="9" y="2.5" width="6" height="3" rx="1"/><line x1="9" y1="10.5" x2="15" y2="10.5"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="17.5" x2="13" y2="17.5"/></>,
     cart: <><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="17" cy="19.5" r="1.4"/><path d="M3.5 4h2l2 11.5h10l2-8H6.2"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.9" y1="4.9" x2="7" y2="7"/><line x1="17" y1="17" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="7" y2="17"/><line x1="17" y1="7" x2="19.1" y2="4.9"/></>,
+    gift: <><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><line x1="12" y1="8" x2="12" y2="20"/><path d="M12 8C10 8 7.5 7.3 7.5 5.5S10 3.5 12 8zm0 0c2 0 4.5-.7 4.5-2.5S14 3.5 12 8z"/></>,
     "map-pin": <><path d="M12 21s7-7.7 7-12.5A7 7 0 1 0 5 8.5C5 13.3 12 21 12 21z"/><circle cx="12" cy="8.5" r="2.5"/></>,
     phone: <path d="M6 3h3l2 5-2.4 1.6a12 12 0 0 0 6.8 6.8L17 14l5 2v3a2 2 0 0 1-2 2A17 17 0 0 1 4 5a2 2 0 0 1 2-2z"/>,
     x: <><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></>,

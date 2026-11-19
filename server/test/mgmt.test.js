@@ -72,6 +72,36 @@ test("команда: рейтинг ТП, план и план/факт", async
   assert.equal((await api("GET", `/api/team?${range}`, { token: tok.buh })).status, 403);
 });
 
+test("личный план ТП: только свой, без чужих и без редактирования", async () => {
+  const month = day(0).slice(0, 7);
+  await api("PUT", "/api/plans", { token: tok.dir, body: { month, items: [{ manager: "Ахметов Ержан", amount: 100000 }, { manager: "Иванов Пётр", amount: 50000 }] } });
+  const mp = await api("GET", "/api/my-plan", { token: tok.tp1 });
+  assert.equal(mp.status, 200, mp.raw);
+  assert.equal(mp.body.canPick, false);
+  assert.equal(mp.body.months.length, 2);
+  const cur = mp.body.months[0];
+  assert.equal(cur.month, month);
+  assert.equal(cur.plan, 100000, "план только Ахметова, без плана Иванова");
+  assert.equal(Math.round((cur.done + cur.left - cur.over) * 100) / 100, 100000);
+  assert.equal(mp.body.clients.total, 2);
+  assert.ok(!/Иванов/.test(mp.raw), "чужой ТП не виден");
+  // параметр manager для ТП игнорируется: чужой план получить нельзя
+  const peek = await api("GET", "/api/my-plan?manager=" + encodeURIComponent("Иванов Пётр"), { token: tok.tp1 });
+  assert.equal(peek.body.months[0].plan, 100000);
+  // владелец и директор выбирают ТП
+  const own = await api("GET", "/api/my-plan", { token: tok.owner });
+  assert.equal(own.body.canPick, true);
+  assert.ok(own.body.managers.includes("Иванов Пётр"));
+  const iv = await api("GET", "/api/my-plan?manager=" + encodeURIComponent("Иванов Пётр"), { token: tok.dir });
+  assert.equal(iv.body.months[0].plan, 50000);
+  assert.equal((await api("GET", "/api/my-plan?manager=Нет", { token: tok.dir })).status, 404);
+  assert.equal((await api("GET", "/api/my-plan", { token: tok.sklad })).status, 403);
+  // план меньше выручки → «сверх плана»
+  await api("PUT", "/api/plans", { token: tok.dir, body: { month, items: [{ manager: "Ахметов Ержан", amount: 1 }] } });
+  const ov = await api("GET", "/api/my-plan", { token: tok.tp1 });
+  assert.equal(ov.body.months[0].left, 0);
+});
+
 test("финансы: владелец и директор", async () => {
   const f = await api("GET", `/api/finance?${range}`, { token: tok.owner });
   assert.equal(f.status, 200);

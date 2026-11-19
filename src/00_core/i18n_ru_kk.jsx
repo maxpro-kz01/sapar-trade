@@ -13,8 +13,14 @@ let KK_RE = null;
 function kkRegex() {
   if (KK_RE) return KK_RE;
   const keys = Object.keys(KK_DICT).filter((k) => k.length >= 1 && KK_DICT[k] !== undefined).sort((a, b) => b.length - a.length);
-  const esc = keys.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  KK_RE = new RegExp("(?<![" + KK_LETTERS + "])(" + esc.join("|") + ")(?![" + KK_LETTERS + "])", "g");
+  const L = "[" + KK_LETTERS + "]";
+  // Границы слова проверяем только там, где у фразы с краю буква: фраза «, просрочено» или «Цены: «»
+  // начинается/заканчивается знаком и должна находиться даже рядом с буквой.
+  const parts = keys.map((k) => {
+    const e = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("[" + KK_LETTERS + "]$").test(k) ? e + "(?!" + L + ")" : e;
+  });
+  KK_RE = new RegExp("(?:(?<!" + L + ")|(?!" + L + "))(" + parts.join("|") + ")", "g");
   return KK_RE;
 }
 function trKK(s) {

@@ -3,7 +3,7 @@
 import { q } from "../db/pool.js";
 import { can, scopeOf, managersOf } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
-import { round2, pct, stripForRole, freshness, overdueDate, overdueSql, UNIT_COST_CTE, prorate } from "./scope.js";
+import { round2, pct, stripForRole, freshness, overdueDate, overdueSql, UNIT_COST_CTE, prorate, today, shiftDay } from "./scope.js";
 
 export async function team(user, range) {
   const scope = scopeOf(user, "team");
@@ -96,4 +96,64 @@ export async function savePlans(user, month, items) {
     n++;
   }
   return { ok: true, saved: n };
+}
+
+// ===== Личный план ТП (экран «Мой план») =====
+// ТП и супервайзер видят только себя (users.manager_1c); владелец/директор выбирают ТП параметром manager.
+// Показываем текущий и прошлый месяц: план, выполнено (выручка из 1С), осталось / сверх плана, процент.
+function monthBounds(ym) {
+  const from = ym + "-01";
+  const next = new Date(from + "T00:00:00Z"); next.setUTCMonth(next.getUTCMonth() + 1);
+  return { from, to: shiftDay(next.toISOString().slice(0, 10), -1) };
+}
+const prevMonth = (ym) => { const d = new Date(ym + "-01T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); };
+
+export async function myPlan(user, manager) {
+  const scope = scopeOf(user, "team");
+  if (!scope) throw new HttpError(403, "Нет доступа");
+  let managers;
+  if (scope === "own") managers = managersOf(user);
+  else {
+    const { rows } = await q(`SELECT DISTINCT manager FROM onec_clients WHERE coalesce(manager,'') <> ''
+                              UNION SELECT DISTINCT manager FROM sales_plans ORDER BY 1`);
+    const all = rows.map((r) => r.manager);
+    if (!manager) return { canPick: true, managers: all, manager: null, months: [] };
+    if (!all.includes(manager)) throw new HttpError(404, "ТП не найден");
+    managers = [manager];
+  }
+  const cur = today().slice(0, 7);
+  const months = [];
+  for (const ym of [cur, prevMonth(cur)]) {
+    const { from, to } = monthBounds(ym);
+    let plan = null, done = 0;
+    if (managers.length) {
+      const { rows: [pl] } = await q("SELECT sum(amount) AS a, count(*) AS n FROM sales_plans WHERE month = $1 AND manager = ANY($2::text[])", [from, managers]);
+      plan = Number(pl.n) ? round2(pl.a) : null;
+      const { rows: [sl] } = await q(
+        `SELECT coalesce(sum(s.revenue),0) AS r FROM onec_sales_daily s JOIN onec_clients c ON c.code = s.client_code
+         WHERE s.day BETWEEN $1 AND $2 AND c.manager = ANY($3::text[])`, [from, to, managers]);
+      done = round2(sl.r);
+    }
+    months.push({
+      month: ym, plan, done,
+      left: plan === null ? null : round2(Math.max(plan - done, 0)),
+      over: plan === null ? null : round2(Math.max(done - plan, 0)),
+      pct: plan ? pct(done, plan) : null,
+    });
+  }
+  let clients = { active: 0, total: 0, debt: 0, overdue: 0, avg: null };
+  if (managers.length) {
+    const { from, to } = monthBounds(cur);
+    const { rows: [c] } = await q(
+      `SELECT (SELECT count(*) FROM onec_clients WHERE manager = ANY($1::text[])) AS total,
+              (SELECT count(DISTINCT s.client_code) FROM onec_sales_daily s JOIN onec_clients c ON c.code = s.client_code
+                WHERE s.day BETWEEN $2 AND $3 AND c.manager = ANY($1::text[])) AS active,
+              (SELECT coalesce(sum(d.amount) FILTER (WHERE d.amount > 0),0) FROM onec_debts_open d JOIN onec_clients c ON c.code = d.client_code
+                WHERE c.manager = ANY($1::text[])) AS debt,
+              (SELECT coalesce(sum(d.amount) FILTER (WHERE d.amount > 0 AND ${overdueSql("d.", "$4")}),0) FROM onec_debts_open d JOIN onec_clients c ON c.code = d.client_code
+                WHERE c.manager = ANY($1::text[])) AS overdue`, [managers, from, to, overdueDate()]);
+    clients = { active: Number(c.active), total: Number(c.total), debt: round2(c.debt), overdue: round2(c.overdue),
+      avg: Number(c.active) ? round2(months[0].done / Number(c.active)) : null };
+  }
+  return { canPick: scope === "all", manager: scope === "all" ? manager : null, managers: scope === "all" ? undefined : managers, months, clients, ...(await freshness()) };
 }

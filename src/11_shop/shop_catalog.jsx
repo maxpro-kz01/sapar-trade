@@ -25,6 +25,7 @@ function ShopCatalog({ cart, setCart, onAuthLost, onOpenCart }) {
     return all.filter((i) => (!group || i.group === group) && (!s || i.name.toLowerCase().includes(s)));
   }, [cat.data, q, group]);
   const setQty = (code, v) => setCart((c) => { const n = { ...c }; if (v > 0) n[code] = v; else delete n[code]; return n; });
+  const promos = (cat.data && cat.data.promos) || [];
   const lines = Object.keys(cart).length;
   const total = ((cat.data && cat.data.items) || []).reduce((a, i) => a + (cart[i.code] ? cart[i.code] * i.price : 0), 0);
   return (
@@ -39,11 +40,18 @@ function ShopCatalog({ cart, setCart, onAuthLost, onOpenCart }) {
         )}
       </div>
       <div className="flex-1 overflow-y-auto px-4" style={{ paddingBottom: lines ? 150 : 90 }}>
+        {promos.length > 0 && (
+          <div className="rounded-2xl p-3 mt-2" style={{ background: "#FFF6DE", border: "1px solid #F1DCA0" }}>
+            <p className="flex items-center gap-1.5" style={{ fontSize: 12.5, fontWeight: 800, color: "#8A5A00" }}><Ico name="gift" size={14} color="#8A5A00" />Акции</p>
+            {promos.map((p) => <p key={p.id} style={{ fontSize: 12.5, marginTop: 3 }}><b>{p.title}</b> — {p.label}: {p.giftName} × {p.giftQty}{p.dateTo ? " (до " + stFmtDate(p.dateTo) + ")" : ""}</p>)}
+          </div>
+        )}
         <LiveState loading={cat.loading} error={cat.error} onRetry={cat.reload} empty={cat.data && !items.length ? (q || group ? "Ничего не найдено" : "Каталог пока пуст") : null} />
         {items.map((i) => (
           <div key={i.code} className="flex items-center gap-3 py-3" style={{ borderBottom: "1px solid var(--line)", opacity: i.inStock ? 1 : 0.65 }}>
             <div className="flex-1 min-w-0">
               <p style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink)", lineHeight: 1.3 }}>{i.name}</p>
+              {promos.filter((p) => p.buyCode === i.code).map((p) => <div key={p.id}><PromoTag p={p} n={cart[i.code] || 0} /></div>)}
               <p className="font-mono-kz" style={{ fontSize: 12.5, color: "var(--navy)", fontWeight: 700, marginTop: 2 }}>{stMoney(i.price)}{i.unit ? <span style={{ color: "var(--muted)", fontWeight: 500 }}> / {i.unit}</span> : null}</p>
             </div>
             <ShopQty qty={cart[i.code] || 0} onChange={(v) => setQty(i.code, v)} disabled={!i.inStock} />
@@ -73,6 +81,7 @@ function ShopCartModal({ cart, setCart, onClose, onAuthLost, onDone }) {
   const byCode = new Map(((cat.data && cat.data.items) || []).map((i) => [i.code, i]));
   const lines = Object.entries(cart).map(([code, qty]) => ({ code, qty, it: byCode.get(code) })).filter((l) => l.it);
   const total = lines.reduce((a, l) => a + l.qty * l.it.price, 0);
+  const gifts = promoGiftsFor((cat.data && cat.data.promos) || [], (code) => cart[code]);
   const d = debt.data;
   const debtOn = d && d.limit > 0;
   const setQty = (code, v) => setCart((c) => { const n = { ...c }; if (v > 0) n[code] = v; else delete n[code]; return n; });
@@ -97,6 +106,7 @@ function ShopCartModal({ cart, setCart, onClose, onAuthLost, onDone }) {
             <ShopQty qty={l.qty} onChange={(v) => setQty(l.code, v)} />
           </div>
         ))}
+        {gifts.map((p) => <GiftLine key={p.id} name={p.giftName} qty={p.giftQty} unit={p.giftUnit} title={p.title} />)}
         {!!lines.length && (
           <>
             <p style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, margin: "14px 0 6px" }}>Оплата</p>

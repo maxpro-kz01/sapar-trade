@@ -29,6 +29,13 @@ export async function problems(user) {
     if (Number(n.fresh) > 0) list.push({ lvl: "yellow", code: "shoporders", title: `Новые заказы от магазинов: ${n.fresh}`, detail: "Магазины заказали сами — примите заказы", tab: "orders" });
   }
 
+  if (can(user, "promos.edit") || can(user, "orders.manage")) {
+    const { rows: [g] } = await q(
+      `SELECT count(DISTINCT e.order_id) AS n FROM order_events e JOIN orders o ON o.id = e.order_id
+       WHERE e.event = 'Подарок: не хватило' AND e.at > now() - interval '48 hours' AND o.status NOT IN ('Отгружен', 'Отменён')`);
+    if (Number(g.n) > 0) list.push({ lvl: "yellow", code: "giftshort", title: `Не хватает подарка по акциям: заказов ${g.n}`, detail: "На складе меньше, чем положено по акции — проверьте остаток и решите, как отдать подарок", tab: "orders" });
+  }
+
   if (can(user, "routes")) {
     const { rows: [f] } = await q(
       `SELECT count(*) AS n FROM route_stops st JOIN route_sheets sh ON sh.id = st.sheet_id
