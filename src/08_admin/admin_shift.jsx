@@ -64,6 +64,28 @@ function AdminShiftLive({ session, authLost, showToast }) {
   );
 }
 
+// Прайс для новых магазинов (которых ещё нет в 1С) и для товаров, у которых нет цены договора магазина
+function ShopPriceSetting({ session, authLost, showToast, current, onSaved }) {
+  const d = useLive(session, "/api/shops/diag", authLost);
+  const types = (d.data?.priceTypes || []).filter((t) => t.n > 0 && t.name !== "Себестоимость");
+  const set = async (v) => {
+    try { await stApi("/api/settings", { method: "PUT", token: session.token, body: { shopPriceType: v } }); showToast("Сохранено"); onSaved(); }
+    catch (e) { showToast(e.message); }
+  };
+  return (
+    <MgCard>
+      <p style={{ fontSize: 13.5, fontWeight: 800 }}>Прайс для новых магазинов</p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.45, marginBottom: 8 }}>
+        По этому прайсу товары видит магазин, которого ещё нет в 1С, и им же закрываются товары, у которых нет цены договора. Магазин, привязанный к клиенту 1С, видит цены своего договора.
+      </p>
+      <select value={current || ""} disabled={!liveCan(session, "settings")} onChange={(e) => set(e.target.value)} className="w-full px-3 py-3 rounded-xl" style={{ border: "1.5px solid var(--line)", fontSize: 14, background: "#fff" }}>
+        {current && !types.some((t) => t.name === current) && <option value={current}>{current}</option>}
+        {types.map((t) => <option key={t.name} value={t.name}>{t.name} · цен: {t.n}</option>)}
+      </select>
+    </MgCard>
+  );
+}
+
 function AdminSettingsLive({ session, authLost, showToast }) {
   const r = useLive(session, "/api/settings", authLost);
   const [phone, setPhone] = useState("");
@@ -100,6 +122,7 @@ function AdminSettingsLive({ session, authLost, showToast }) {
           </button>
         </div>
       </MgCard>
+      <ShopPriceSetting session={session} authLost={authLost} showToast={showToast} current={r.data.shopPriceType} onSaved={r.reload} />
       <AdminDebtsSource session={session} authLost={authLost} showToast={showToast} />
     </>
   );

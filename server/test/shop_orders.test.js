@@ -65,6 +65,16 @@ test("каталог: у товара нет цены магазина — бе�
   await pool.query("DELETE FROM onec_products WHERE code = 'P5'");
 });
 
+test("настройка «Прайс для новых магазинов»: новый магазин видит цены этого типа", async () => {
+  assert.equal((await api("PUT", "/api/settings", { token: tok.owner, body: { shopPriceType: "Нет такого" } })).status, 400);
+  assert.equal((await api("PUT", "/api/settings", { token: tok.owner, body: { shopPriceType: "Оптовая" } })).status, 200);
+  const c = await api("GET", "/api/shop/catalog", { token: sh.new });
+  assert.equal(c.body.items.find((i) => i.code === "P1").price, 15000, "новый магазин теперь по «Оптовая»");
+  const nur = await api("GET", "/api/shop/catalog", { token: sh.nur });
+  assert.equal(nur.body.items.find((i) => i.code === "P1").price, 15000, "привязанный — по договору");
+  assert.equal((await api("PUT", "/api/settings", { token: tok.owner, body: { shopPriceType: "" } })).status, 200);
+});
+
 test("привязка: оператор ищет клиента 1С по названию, коду и телефону", async () => {
   const shop = (await api("GET", "/api/shops?filter=new", { token: tok.adm })).body.find((s) => s.name === "Мини-маркет Заря");
   const find = async (q) => (await api("GET", `/api/shops/${shop.id}/suggest?q=${encodeURIComponent(q)}`, { token: tok.adm })).body.map((c) => c.code);

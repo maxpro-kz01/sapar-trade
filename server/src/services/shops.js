@@ -8,15 +8,24 @@ import { getSettings } from "./settings.js";
 import { orderNumber } from "./orders.js";
 import { creditInfo, assertCanBuyOnCredit } from "./credit.js";
 
+// Какой тип цен у магазина: у привязанного — из договора 1С, у нового — из настройки «Прайс для новых магазинов» (по умолчанию «Рынок»).
+// fb — запасной: берём, когда у товара нет цены своего типа (в каталоге и в заказе правило одно).
+export async function shopTypes(shop) {
+  const want = String((await getSettings()).shopPriceType || "").trim();
+  const ok = !!want && (await q("SELECT 1 FROM onec_prices WHERE price_type = $1 AND price > 0 LIMIT 1", [want])).rowCount;
+  const fb = ok ? want : await priceType();
+  const pt = shop?.client_code ? await priceTypeFor(shop.client_code) : ok ? want : await priceTypeFor(null);
+  return { pt, fb };
+}
+
 export const PAYMENTS = ["cash", "transfer", "debt"];
 export const PAYMENT_NAMES = { cash: "Наличными", transfer: "Переводом", debt: "В долг" };
 // У магазина, которого нет в 1С, временный код; при привязке к клиенту 1С заказы переносятся на настоящий
 export const clientCodeOf = (shop) => shop.client_code || `NEW-${shop.id}`;
 
 export async function shopCatalog(shop) {
-  const pt = await priceTypeFor(shop.client_code);
-  // решение 19.11.2026: если у товара нет цены типа магазина — берём цену самого полного типа («Оптовая»)
-  const fb = await priceType();
+  // если у товара нет цены типа магазина — берём цену из настройки «Прайс для новых магазинов» (по умолчанию «Рынок»)
+  const { pt, fb } = await shopTypes(shop);
   const { rows } = await q(
     `SELECT pr.code, pr.name, coalesce(pr.group_name, 'Без группы') AS grp, pr.unit, coalesce(NULLIF(p.price, 0), f.price) AS price, coalesce(st.qty, 0) > 0 AS in_stock
      FROM onec_products pr
@@ -44,8 +53,7 @@ export async function createShopOrder(shop, b) {
   const { rows: [cnt] } = await q("SELECT count(*) AS n FROM orders WHERE shop_id = $1 AND created_at > now() - interval '1 day'", [shop.id]);
   if (Number(cnt.n) >= config.shopOrdersPerDay) throw new HttpError(429, "Слишком много заказов за сутки. Позвоните в офис");
 
-  const pt = await priceTypeFor(shop.client_code);
-  const fb = await priceType();
+  const { pt, fb } = await shopTypes(shop);
   const { rows: prods } = await q(
     `SELECT pr.code, pr.name, pr.unit, coalesce(NULLIF(p.price, 0), f.price) AS price, coalesce(st.qty, 0) AS stock FROM onec_products pr
      LEFT JOIN onec_prices p ON p.product_code = pr.code AND p.price_type = $1

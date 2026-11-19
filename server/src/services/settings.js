@@ -5,7 +5,7 @@ import { HttpError } from "../lib/http.js";
 
 // onecOrders — агент создаёт в 1С «Реализацию» (непроведённую) по заказам из приложения (ТЗ финансов v1.2, часть D)
 // debtsSource — откуда брать долги клиентов: 'buh' — 1С:Бухгалтерия, счёт 1274 (ТЗ TZ_DEBTS_BUH), 'utp' — УТП
-export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false, debtsSource: "buh", shopMaxOrder: 3000000, shopConfirmCode: false };
+export const DEFAULTS = { directorPhone: "+7 700 105 17 17", onecOrders: false, debtsSource: "buh", shopMaxOrder: 3000000, shopConfirmCode: false, shopPriceType: "Рынок" };
 
 export async function getSettings() {
   const { rows } = await q("SELECT key, value FROM settings");
@@ -34,6 +34,14 @@ export async function saveSettings(user, b) {
     const n = Number(b.shopMaxOrder);
     if (!Number.isFinite(n) || n < 0 || n > 1e10) throw new HttpError(400, "shopMaxOrder: число от 0 (0 — без ограничения)");
     saved.shopMaxOrder = Math.round(n);
+  }
+  if (b?.shopPriceType !== undefined) {
+    const t = String(b.shopPriceType).trim().slice(0, 80);
+    if (t) {
+      const { rowCount } = await q("SELECT 1 FROM onec_prices WHERE price_type = $1 AND price > 0 LIMIT 1", [t]);
+      if (!rowCount) throw new HttpError(400, `Тип цен «${t}» не найден в 1С`);
+    }
+    saved.shopPriceType = t;
   }
   if (b?.shopConfirmCode !== undefined) {
     if (typeof b.shopConfirmCode !== "boolean") throw new HttpError(400, "shopConfirmCode: да или нет");
