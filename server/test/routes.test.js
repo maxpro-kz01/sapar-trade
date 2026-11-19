@@ -32,7 +32,9 @@ before(async () => {
 after(async () => { await env?.stop(); });
 
 test("права: составлять могут владелец, директор, оператор, склад; остальные нет", async () => {
-  for (const l of ["owner", "dir", "oper", "sklad"]) assert.equal((await api("GET", "/api/routes", { token: tok[l] })).status, 200, l);
+  for (const l of ["owner", "dir", "oper"]) assert.equal((await api("GET", "/api/routes", { token: tok[l] })).status, 200, l);
+  assert.equal((await api("GET", "/api/routes", { token: tok.sklad })).status, 403, "складу маршруты и оплаты не нужны");
+  assert.equal((await api("GET", "/api/routes/payments?from=2026-01-01&to=2026-12-31", { token: tok.sklad })).status, 403, "склад не видит деньги");
   for (const l of ["tp1", "buh", "drv1"]) {
     assert.equal((await api("GET", "/api/routes", { token: tok[l] })).status, 403, l);
     assert.equal((await api("POST", "/api/routes", { token: tok[l], body: { driverId: ids.drv1, orderIds: [] } })).status, 403, l);
@@ -57,8 +59,8 @@ test("в лист попадают только «Собран», заказ н�
   const ok = await api("POST", "/api/routes", { token: tok.oper, body: { driverId: ids.drv1, orderIds: [o1, o2] } });
   assert.equal(ok.status, 201);
   sheet = ok.body.id;
-  assert.equal((await api("POST", "/api/routes", { token: tok.sklad, body: { driverId: ids.drv2, orderIds: [o2] } })).status, 409, "заказ уже в другом листе");
-  assert.equal((await api("POST", "/api/routes", { token: tok.sklad, body: { driverId: ids.drv1, orderIds: [] } })).status, 409, "второй лист на ту же дату у того же водителя");
+  assert.equal((await api("POST", "/api/routes", { token: tok.oper, body: { driverId: ids.drv2, orderIds: [o2] } })).status, 409, "заказ уже в другом листе");
+  assert.equal((await api("POST", "/api/routes", { token: tok.oper, body: { driverId: ids.drv1, orderIds: [] } })).status, 409, "второй лист на ту же дату у того же водителя");
   const av2 = await api("GET", "/api/routes/orders", { token: tok.oper });
   assert.ok(!av2.body.some((x) => x.orderId === o1), "заказ в листе пропал из доступных");
 });
@@ -131,20 +133,20 @@ test("правка черновика, удаление, ручное закры
   const a = await mkOrder("C1", "Магазин Один", { total: 100 });
   const b = await mkOrder("C2", "Магазин Два", { total: 200 });
   const date = dayPlus(2);
-  const c = await api("POST", "/api/routes", { token: tok.sklad, body: { date, driverId: ids.drv1, orderIds: [a] } });
+  const c = await api("POST", "/api/routes", { token: tok.oper, body: { date, driverId: ids.drv1, orderIds: [a] } });
   assert.equal(c.status, 201);
-  assert.equal((await api("PATCH", "/api/routes/" + c.body.id, { token: tok.sklad, body: { orderIds: [b, a] } })).status, 200);
-  let s = (await api("GET", "/api/routes/" + c.body.id, { token: tok.sklad })).body;
+  assert.equal((await api("PATCH", "/api/routes/" + c.body.id, { token: tok.oper, body: { orderIds: [b, a] } })).status, 200);
+  let s = (await api("GET", "/api/routes/" + c.body.id, { token: tok.oper })).body;
   assert.deepEqual(s.stops.map((x) => x.orderId), [b, a]);
-  assert.equal((await api("PATCH", "/api/routes/" + c.body.id, { token: tok.sklad, body: { orderIds: [a] } })).status, 200);
-  s = (await api("GET", "/api/routes/" + c.body.id, { token: tok.sklad })).body;
+  assert.equal((await api("PATCH", "/api/routes/" + c.body.id, { token: tok.oper, body: { orderIds: [a] } })).status, 200);
+  s = (await api("GET", "/api/routes/" + c.body.id, { token: tok.oper })).body;
   assert.deepEqual(s.stops.map((x) => x.orderId), [a]);
-  assert.equal((await api("POST", "/api/routes/" + c.body.id + "/close", { token: tok.sklad })).status, 400, "черновик закрывать нельзя — его удаляют");
-  assert.equal((await api("DELETE", "/api/routes/" + c.body.id, { token: tok.sklad })).status, 200);
-  assert.equal((await api("GET", "/api/routes/" + c.body.id, { token: tok.sklad })).status, 404);
-  const c2 = await api("POST", "/api/routes", { token: tok.sklad, body: { date, driverId: ids.drv1, orderIds: [a] } });
-  await api("POST", `/api/routes/${c2.body.id}/send`, { token: tok.sklad });
-  assert.equal((await api("POST", `/api/routes/${c2.body.id}/close`, { token: tok.sklad })).status, 200);
+  assert.equal((await api("POST", "/api/routes/" + c.body.id + "/close", { token: tok.oper })).status, 400, "черновик закрывать нельзя — его удаляют");
+  assert.equal((await api("DELETE", "/api/routes/" + c.body.id, { token: tok.oper })).status, 200);
+  assert.equal((await api("GET", "/api/routes/" + c.body.id, { token: tok.oper })).status, 404);
+  const c2 = await api("POST", "/api/routes", { token: tok.oper, body: { date, driverId: ids.drv1, orderIds: [a] } });
+  await api("POST", `/api/routes/${c2.body.id}/send`, { token: tok.oper });
+  assert.equal((await api("POST", `/api/routes/${c2.body.id}/close`, { token: tok.oper })).status, 200);
   const { rows: [o] } = await env.pool.query("SELECT status FROM orders WHERE id = $1", [a]);
   assert.equal(o.status, "Собран", "после ручного закрытия заказ остаётся «Собран»");
 });
@@ -177,7 +179,8 @@ test("оплата по QR: разбивка по способам, лишнее
   const row = rep.body.items.find((x) => x.method === "halyk");
   assert.equal(row.client, "Магазин Два");
   assert.equal(row.amount, 6000);
-  for (const l of ["buh", "dir", "owner", "sklad"]) assert.equal((await api("GET", "/api/routes/payments", { token: tok[l] })).status, 200, l);
+  for (const l of ["buh", "dir", "owner"]) assert.equal((await api("GET", "/api/routes/payments", { token: tok[l] })).status, 200, l);
+  assert.equal((await api("GET", "/api/routes/payments", { token: tok.sklad })).status, 403, "склад оплаты не видит");
   assert.equal((await api("GET", "/api/routes/payments", { token: tok.tp1 })).status, 403, "ТП не видит оплаты");
   const { rows: [ev] } = await env.pool.query("SELECT note FROM order_events WHERE order_id = $1 AND event = 'Отгружен'", [b]);
   assert.match(ev.note, /Halyk QR/);

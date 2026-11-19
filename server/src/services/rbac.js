@@ -27,7 +27,7 @@ export const ROLE_PERMS = {
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],
   financier:  ["sales", "debts", "cash"],
-  warehouse:  ["stock", "orders.all", "orders.manage", "routes"],
+  warehouse:  ["stock", "orders.all", "orders.manage"],
   admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.all", "tasks.create", "routes"],
   driver:     ["fleet.send"],
 };
