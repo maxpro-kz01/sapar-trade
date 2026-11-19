@@ -1,7 +1,7 @@
 // Sapar Trade — торговый представитель. Модуль: оболочка приложения ТП (вход по личному логину)
 // Вкладки: Мои магазины → заказ, Мои заказы, Мой план. Только свои клиенты; без себестоимости и маржи.
 
-const TP_TABS = { stores: ["store", "Магазины"], orders: ["clipboard", "Мои заказы"], plan: ["trending-up", "Мой план"] };
+const TP_TABS = { stores: ["store", "Магазины"], orders: ["clipboard", "Мои заказы"], plan: ["trending-up", "Мой план"], tasks: ["check-circle", "Задачи"] };
 
 function TpApp({ session, setSession, onExit }) {
   // вкладка и открытый магазин — в истории браузера: «Назад» из заказа ведёт к списку магазинов (nav_history.js)
@@ -19,9 +19,10 @@ function TpApp({ session, setSession, onExit }) {
   const authLost = (msg) => onExit(msg || "Сессия завершена, войдите снова");
   // каталог зависит от магазина: цены — по типу цен его договора в 1С (ТЗ TZ_APP_LOGIN_PRICES, часть C)
   const catalog = useLive(session, store ? "/api/catalog?client=" + encodeURIComponent(store.code) : null, authLost);
+  const [taskCount, reloadTasks] = useMyTasksCount(session, authLost);
   const t = stToday();
   const p = { session, authLost, showToast, go: () => {}, param: null, setParam: () => {} };
-  const pick = (id) => setTab(id);
+  const pick = (id) => { setTab(id); if (id === "tasks") reloadTasks(); };
   return (
     <div className="relative h-full flex flex-col kz-app" style={{ background: "var(--bg)" }}>
       <StatusBar />
@@ -41,8 +42,9 @@ function TpApp({ session, setSession, onExit }) {
           onBack={() => history.back()} onDone={() => { setCartOf(store.code)({}); setTab("orders"); }} />}
         {tab === "orders" && <OrdersBoard {...p} defaultFilter="all" />}
         {tab === "plan" && <MyPlan {...p} />}
+        {tab === "tasks" && <MgTasks {...p} />}
       </div>
-      <AppNav items={Object.entries(TP_TABS).map(([id, [icon, label]]) => ({ id, icon, label }))} active={store ? "stores" : tab} onPick={pick} spread
+      <AppNav items={Object.entries(TP_TABS).map(([id, [icon, label]]) => ({ id, icon, label, badge: id === "tasks" ? taskCount : 0 }))} active={store ? "stores" : tab} onPick={pick} spread
         brand={<NavBrand title="Sapar Trade" sub="Торговый представитель" />} />
       {pwd && <LivePasswordModal session={session} onClose={() => setPwd(false)}
         onChanged={(token) => { setSession({ ...session, token }); setPwd(false); showToast("Пароль изменён"); }} />}

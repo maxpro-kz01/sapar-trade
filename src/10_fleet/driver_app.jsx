@@ -8,6 +8,7 @@ function DriverApp({ session, setSession, onExit }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [tab, setTab] = useState("trip");
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2600); };
   const authLost = (msg) => onExit(msg || "Сессия завершена, войдите снова");
   const gps = useGpsTracker(session, !!trip, { onAuthLost: authLost, onTripGone: () => { setTrip(null); showToast("Рейс завершён"); } });
@@ -45,6 +46,7 @@ function DriverApp({ session, setSession, onExit }) {
       return false;
     } finally { setBusy(false); }
   };
+  const [taskCount, reloadTasks] = useMyTasksCount(session, authLost);
   const exit = async () => { if (trip && !(await end())) return; onExit(); };
 
   const onTrip = !!trip;
@@ -55,15 +57,16 @@ function DriverApp({ session, setSession, onExit }) {
       <div className="px-5 pb-2 flex items-center gap-2 kz-head">
         <div className="rounded-xl flex items-center justify-center shrink-0" style={{ width: 32, height: 32, background: "#fff", border: "1px solid var(--line)" }}><Logo size={24} /></div>
         <div className="flex-1 min-w-0">
-          <p className="font-display truncate" style={{ fontSize: 13.5, fontWeight: 800 }}>Рейс</p>
+          <p className="font-display truncate" style={{ fontSize: 13.5, fontWeight: 800 }}>{tab === "tasks" ? "Задачи" : "Рейс"}</p>
           <p className="truncate" style={{ fontSize: 10, color: "var(--muted)" }}>{session.user.name} · {LIVE_ROLES[session.user.role] || session.user.role}</p>
         </div>
         <button onClick={() => setPwd(true)} title="Сменить пароль" className="p-2 rounded-full" style={{ background: "#F2F1F8" }}><Ico name="settings" size={15} /></button>
         <button onClick={exit} title="Выйти" className="p-2 rounded-full" style={{ background: "#FCE7E6" }}><Ico name="log-out" size={15} color="var(--red)" /></button>
       </div>
-      <div className="flex-1 overflow-y-auto pb-10 px-5 pt-2 font-body kz-main kz-narrow">
-        {trip === undefined && <LiveState loading />}
-        {trip !== undefined && (
+      <div className="flex-1 overflow-y-auto pb-24 px-5 pt-2 font-body kz-main kz-narrow">
+        {tab === "tasks" && <MgTasks session={session} authLost={authLost} showToast={showToast} />}
+        {tab === "trip" && trip === undefined && <LiveState loading />}
+        {tab === "trip" && trip !== undefined && (
           <>
             <DriverRoute session={session} authLost={authLost} showToast={showToast} gps={gps} />
             <div className="rounded-2xl p-5 mb-3 text-center" data-testid="trip-card" style={{ background: onTrip ? "#E3F5E9" : "#fff", border: "1px solid " + (onTrip ? "#BFE6CB" : "var(--line)") }}>
@@ -98,6 +101,8 @@ function DriverApp({ session, setSession, onExit }) {
           </>
         )}
       </div>
+      <AppNav items={[{ id: "trip", icon: "map-pin", label: "Рейс" }, { id: "tasks", icon: "check-circle", label: "Задачи", badge: taskCount }]} active={tab}
+        onPick={(id) => { setTab(id); if (id === "tasks") reloadTasks(); }} spread brand={<NavBrand title="Sapar Trade" sub="Водитель-экспедитор" />} />
       {pwd && <LivePasswordModal session={session} onClose={() => setPwd(false)}
         onChanged={(token) => { setSession({ ...session, token }); setPwd(false); showToast("Пароль изменён"); }} />}
       <Toast toast={toast} />

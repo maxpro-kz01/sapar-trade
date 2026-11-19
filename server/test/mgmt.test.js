@@ -13,7 +13,7 @@ before(async () => {
   env = await startEnv();
   api = env.api;
   tok.owner = await login(OWNER.login, OWNER.password);
-  for (const [l, role, m] of [["dir", "director"], ["tp1", "tp", "Ахметов Ержан"], ["sv1", "supervisor", "Ахметов Ержан, Иванов Пётр"], ["sklad", "warehouse"], ["buh", "accountant"], ["adm", "admin"]]) {
+  for (const [l, role, m] of [["dir", "director"], ["tp1", "tp", "Ахметов Ержан"], ["sv1", "supervisor", "Ахметов Ержан, Иванов Пётр"], ["sklad", "warehouse"], ["buh", "accountant"], ["adm", "admin"], ["drv", "driver"]]) {
     await api("POST", "/api/users", { token: tok.owner, body: { login: l, name: l, role, password: "Passw0rd1", manager1c: m } });
     tok[l] = await login(l, "Passw0rd1");
   }
@@ -157,6 +157,19 @@ test("задачи: создать, назначить, статус, комме
   const t = all.body.find((x) => x.id === c.body.id);
   assert.equal(t.status, "В работе");
   assert.equal(t.comments[0].text, "Договорился на пятницу");
+});
+
+test("задачи водителю-экспедитору: видит только свою, меняет статус, чужую не видит", async () => {
+  const staff = await api("GET", "/api/staff", { token: tok.dir });
+  const drv = staff.body.find((x) => x.name === "drv");
+  const c = await api("POST", "/api/tasks", { token: tok.dir, body: { title: "Заехать на склад за паллетами", assigneeId: drv.id, priority: "Средний" } });
+  assert.equal(c.status, 201, c.raw);
+  const mine = await api("GET", "/api/tasks", { token: tok.drv });
+  assert.equal(mine.status, 200);
+  assert.deepEqual(mine.body.map((x) => x.id), [c.body.id]);
+  assert.equal((await api("GET", "/api/tasks", { token: tok.sklad })).body.some((x) => x.id === c.body.id), false);
+  assert.equal((await api("PATCH", `/api/tasks/${c.body.id}`, { token: tok.drv, body: { status: "Выполнена" } })).status, 200);
+  assert.equal((await api("POST", "/api/tasks", { token: tok.drv, body: { title: "сам себе" } })).status, 403, "водитель задач не ставит");
 });
 
 test("задачи: ставят владелец, директор и администратор — друг другу и всем; остальные только исполняют", async () => {

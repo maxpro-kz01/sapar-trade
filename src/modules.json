@@ -35,6 +35,7 @@
  "10_fleet/fleet_map.jsx",
  "06_management/mg_fleet.jsx",
  "06_management/mg_tasks.jsx",
+  "06_management/field_tasks.jsx",
  "06_management/mg_ai.jsx",
  "06_management/mg_system.jsx",
  "06_management/mg_app.jsx",
