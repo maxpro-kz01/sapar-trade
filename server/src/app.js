@@ -8,7 +8,7 @@ import syncRoutes from "./routes/sync.js";
 import reportRoutes from "./routes/reports.js";
 import mgmtRoutes from "./routes/mgmt.js";
 import orderRoutes from "./routes/orders.js";
-import fleetRoutes from "./routes/fleet.js";
+import fleetRoutes, { traccarRoutes } from "./routes/fleet.js";
 
 export function createApp() {
   const app = express();
@@ -19,12 +19,14 @@ export function createApp() {
     res.set({ "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store" });
     next();
   });
-  app.use("/api", cors({ origin: config.corsOrigins, allowedHeaders: ["Content-Type", "Authorization"], methods: ["GET", "POST", "PUT", "PATCH"], maxAge: 600 }));
+  app.use("/api", cors({ origin: config.corsOrigins, allowedHeaders: ["Content-Type", "Authorization"], methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], maxAge: 600 }));
   // агенту 1С нужны большие пакеты, остальным — маленькие
   app.use("/api/sync/1c", express.json({ limit: "25mb" }));
+  app.use("/api/fleet/traccar", express.urlencoded({ extended: false, limit: "20kb" })); // Traccar Client может слать форму
   app.use(express.json({ limit: "200kb" }));
 
   app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+  app.use("/api/fleet/traccar", traccarRoutes); // без входа по паролю — до общих /api
   app.use("/api/auth", authRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/sync", syncRoutes);

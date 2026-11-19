@@ -1,5 +1,6 @@
 // GPS экспедиторов (ТЗ_GPS): рейсы водителей, приём точек с телефона, карта для владельца и директора.
 // Точки принимаются только в открытом рейсе — вне рейса место водителя не хранится.
+import crypto from "node:crypto";
 import { q, pool } from "../db/pool.js";
 import { can } from "./rbac.js";
 import { HttpError, TZ, todayLocal, isIsoDate } from "../lib/http.js";
@@ -123,8 +124,104 @@ export async function addPoints(user, body) {
 export const signalStatus = (inTrip, ageSec) =>
   !inTrip ? "off" : ageSec === null ? "lost" : ageSec <= FRESH_SEC ? "ok" : ageSec <= LOST_SEC ? "late" : "lost";
 
+// --- Traccar Client (фон): точки по личному ключу водителя ---
+
+const TRACCAR_IDLE_MIN = 30;           // нет точек от приложения 30 минут — рейс закрываем сам
+const KNOT = 0.514444;                 // узлы → м/с (OsmAnd отдаёт скорость в узлах)
+const KEY_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // без похожих символов (l, i, o, 0, 1)
+
+const newKey = () => Array.from(crypto.randomBytes(16), (b) => KEY_ALPHABET[b % KEY_ALPHABET.length]).join("");
+
+// Разбор запроса Traccar Client: OsmAnd (query/form) или JSON нового клиента. → { key, point } (point может быть null)
+export function parseTraccar(query = {}, body = {}) {
+  const b = body && typeof body === "object" ? body : {};
+  const pick = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== "");
+  const key = String(pick(query.id, b.id, b.device_id, query.device_id) ?? "").trim();
+  const c = b.location?.coords;
+  let t, lat, lon, acc, spd, hdg;
+  if (c) {
+    t = b.location.timestamp; lat = c.latitude; lon = c.longitude; acc = c.accuracy; hdg = c.heading;
+    spd = c.speed >= 0 ? c.speed : null; // уже м/с
+  } else {
+    t = pick(query.timestamp, b.timestamp); lat = pick(query.lat, b.lat); lon = pick(query.lon, b.lon);
+    acc = pick(query.accuracy, b.accuracy, query.hdop, b.hdop); hdg = pick(query.bearing, b.bearing, query.heading, b.heading);
+    const s = pick(query.speed, b.speed); spd = s === undefined ? null : Number(s) * KNOT;
+  }
+  let ms = Date.now();
+  if (t !== undefined && t !== null && t !== "") {
+    const n = Number(t);
+    ms = Number.isFinite(n) ? (n < 1e11 ? n * 1000 : n) : Date.parse(t); // секунды, миллисекунды или ISO
+  }
+  const point = cleanPoint({ t: ms, lat, lon, acc, spd, hdg });
+  return { key, point };
+}
+
+// Закрыть рейсы Traccar, от которых давно нет точек: время окончания — последняя точка
+async function closeStaleTraccarTrips(userId = null) {
+  await q(
+    `UPDATE trips t SET ended_at = coalesce((SELECT max(at) FROM gps_points g WHERE g.trip_id = t.id), t.started_at)
+     WHERE t.source = 'traccar' AND t.ended_at IS NULL AND ($1::int IS NULL OR t.user_id = $1)
+       AND coalesce((SELECT max(at) FROM gps_points g WHERE g.trip_id = t.id), t.started_at) < now() - make_interval(mins => $2)`,
+    [userId, TRACCAR_IDLE_MIN]);
+}
+
+export async function addTraccarPoint(key, point) {
+  if (!key) throw new HttpError(401, "Нет ключа");
+  const { rows: [u] } = await q("SELECT id FROM users WHERE gps_key = $1 AND role = 'driver' AND is_active", [key]);
+  if (!u) throw new HttpError(401, "Неверный ключ");
+  if (!point) return { accepted: 0 };  // мусорную точку молча пропускаем — приложение не должно застревать
+  await closeStaleTraccarTrips(u.id);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let trip = await openTrip(u.id, client);
+    if (!trip) {
+      const { rows } = await client.query("INSERT INTO trips(user_id, source, started_at) VALUES ($1, 'traccar', $2) RETURNING *", [u.id, point.at]);
+      trip = rows[0];
+    }
+    const r = await client.query(
+      `INSERT INTO gps_points(trip_id, user_id, at, lat, lon, accuracy, speed, heading) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (trip_id, at) DO NOTHING`, [trip.id, u.id, point.at, point.lat, point.lon, point.acc, point.spd, point.hdg]);
+    if (r.rowCount) await client.query(DISTANCE_SQL, [trip.id]);
+    await client.query("COMMIT");
+    return { accepted: r.rowCount };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (e.code === "23505") return { accepted: 0 }; // одновременно открыли рейс — точка придёт со следующим запросом
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// --- ключи водителей (для карточки сотрудника) ---
+
+const needKeys = (user) => { if (!can(user, "users")) throw new HttpError(403, "Нет доступа"); };
+
+export async function listGpsKeys(user) {
+  needKeys(user);
+  const { rows } = await q("SELECT id, name, login, gps_key FROM users WHERE role = 'driver' AND is_active ORDER BY name");
+  return rows.map((r) => ({ id: r.id, name: r.name, login: r.login, key: r.gps_key }));
+}
+
+export async function issueGpsKey(user, id) {
+  needKeys(user);
+  for (let i = 0; i < 3; i++) {
+    try {
+      const { rows } = await q("UPDATE users SET gps_key = $2 WHERE id = $1 AND role = 'driver' AND is_active RETURNING id, name, login, gps_key",
+        [Number(id) || 0, newKey()]);
+      if (!rows[0]) throw new HttpError(404, "Водитель не найден");
+      return { id: rows[0].id, name: rows[0].name, login: rows[0].login, key: rows[0].gps_key };
+    } catch (e) {
+      if (e.code !== "23505") throw e; // ключ случайно совпал с чужим — пробуем другой
+    }
+  }
+  throw new HttpError(500, "Не удалось выпустить ключ, повторите");
+}
+
 export async function live(user) {
   needView(user);
+  await closeStaleTraccarTrips();
   const { rows } = await q(
     `SELECT u.id, u.name, u.login, t.id AS trip_id, t.started_at, t.distance_m,
             lp.at, lp.lat, lp.lon, lp.accuracy, lp.speed, lp.heading,
@@ -177,6 +274,7 @@ export async function track(user, query) {
 
 // Для «Проблем»: водители в рейсе без сигнала больше 5 минут
 export async function lostDrivers() {
+  await closeStaleTraccarTrips();
   const { rows } = await q(
     `SELECT u.name, coalesce(max(g.at), t.started_at) AS last FROM trips t JOIN users u ON u.id = t.user_id
      LEFT JOIN gps_points g ON g.trip_id = t.id

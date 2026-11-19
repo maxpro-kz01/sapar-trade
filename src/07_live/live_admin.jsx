@@ -77,6 +77,7 @@ function LiveUsers({ session, authLost, showToast }) {
           ))}
         </MgCard>
       )}
+      <LiveGpsKeys session={session} showToast={showToast} />
       {form && (
         <Modal title="Новый сотрудник" onClose={() => setForm(null)}>
           <Field label="Имя" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

@@ -18,6 +18,7 @@
  "07_live/live_ui.jsx",
  "07_live/live_login.jsx",
  "07_live/live_admin.jsx",
+ "07_live/live_gps_keys.jsx",
  "06_management/mg_roles.jsx",
  "06_management/mg_ui_parts.jsx",
  "06_management/mg_home.jsx",
