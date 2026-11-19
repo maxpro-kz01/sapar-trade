@@ -2,7 +2,8 @@
 // Новый магазин сразу может заказывать по «Цена Прайс» без «в долг»; после привязки у него цены, долг и лимит по договору 1С.
 
 function ShopLinkModal({ session, shop, onClose, onDone }) {
-  const sug = useLive(session, "/api/shops/" + shop.id + "/suggest");
+  const [find, setFind] = useState("");
+  const sug = useLive(session, "/api/shops/" + shop.id + "/suggest?" + stQs({ q: find.trim().length >= 2 ? find.trim() : "" }));
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -15,7 +16,8 @@ function ShopLinkModal({ session, shop, onClose, onDone }) {
     <Modal title={"Привязать: " + shop.name} onClose={onClose} wide>
       <div className="px-5 pb-6 overflow-y-auto" style={{ maxHeight: "70vh" }}>
         <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>Выберите клиента из 1С. Заказы магазина перейдут на него, а цены, долг и менеджер возьмутся из 1С.</p>
-        <LiveState loading={sug.loading} error={sug.error} onRetry={sug.reload} empty={sug.data && !sug.data.length ? "Похожих клиентов не нашли — введите код ниже" : null} />
+        <Field label="Найти клиента 1С" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Название, телефон или код" />
+        <LiveState loading={sug.loading} error={sug.error} onRetry={sug.reload} empty={sug.data && !sug.data.length ? (find.trim().length >= 2 ? "Никого не нашли — проверьте название или телефон" : "Похожих клиентов не нашли — найдите по названию выше") : null} />
         {(sug.data || []).map((c) => (
           <div key={c.code} className="flex items-center gap-2 py-2.5" style={{ borderBottom: "1px solid var(--line)" }}>
             <div className="flex-1 min-w-0">
@@ -26,7 +28,7 @@ function ShopLinkModal({ session, shop, onClose, onDone }) {
           </div>
         ))}
         <div className="mt-4">
-          <Field label="Или введите код клиента из 1С" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код клиента" />
+          <Field label="Или введите точный код клиента из 1С" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код клиента" />
           {err && <p style={{ fontSize: 12.5, color: "#B3261E", marginBottom: 8 }}>{err}</p>}
           <PrimaryButton full disabled={busy || !code.trim()} onClick={() => link(code.trim())}>Привязать по коду</PrimaryButton>
         </div>

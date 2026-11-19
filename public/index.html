@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="56219d7ecbe1" />
+<meta name="st-build" content="c4080a3f986b" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -1702,7 +1702,7 @@ const KK_DICT = {
   "брак упаковки": "қаптама ақауы",
   "Админ-панель": "Әкімші панелі",
   "Админ": "Әкімші",
-  "Администратор": "Әкімші",
+  "Оператор": "Оператор",
   "Заказы за 24 часа и полная история": "24 сағаттағы тапсырыстар және толық тарих",
   "За 24 часа": "24 сағатта",
   "История по дате": "Күн бойынша тарих",
@@ -4337,7 +4337,7 @@ function StaffGate({
       fontWeight: 700,
       color: "var(--ink)"
     }
-  }, "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440"), React.createElement("p", {
+  }, "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440"), React.createElement("p", {
     style: {
       fontSize: 11.5,
       color: "var(--muted)"
@@ -4932,7 +4932,7 @@ const LOGIN_MODES = {
     allow: () => true
   },
   admin: {
-    title: "Администратор",
+    title: "Оператор",
     icon: "shield-check",
     allow: perms => ["shift", "orders.manage", "orders.all"].some(x => perms.includes(x))
   },
@@ -5101,7 +5101,7 @@ const LIVE_ROLES = {
   accountant: "Бухгалтер",
   financier: "Финансист",
   warehouse: "Склад",
-  admin: "Администратор",
+  admin: "Оператор",
   driver: "Водитель-экспедитор"
 };
 function LiveSync({
@@ -8370,7 +8370,7 @@ function shiftReportText(r) {
   L.push("*ОТЧЁТ ЗА СМЕНУ — ИП «Sapar Trade»*");
   L.push("Дата: " + stFmtDate(r.day));
   L.push("Смена: " + shiftHM(r.from) + " — " + shiftHM(r.to) + "  (" + shiftLen(r.from, r.to) + ")");
-  L.push("Администратор: " + r.adminName);
+  L.push("Оператор: " + r.adminName);
   L.push("");
   L.push("🧾 *ЗАКАЗЫ В ПРИЛОЖЕНИИ: " + o.count + "*");
   L.push("Сумма: " + stMoney(o.total) + (o.avg ? " · средний " + stMoney(o.avg) : ""));
@@ -8744,7 +8744,10 @@ function ShopLinkModal({
   onClose,
   onDone
 }) {
-  const sug = useLive(session, "/api/shops/" + shop.id + "/suggest");
+  const [find, setFind] = useState("");
+  const sug = useLive(session, "/api/shops/" + shop.id + "/suggest?" + stQs({
+    q: find.trim().length >= 2 ? find.trim() : ""
+  }));
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -8781,11 +8784,16 @@ function ShopLinkModal({
       color: "var(--muted)",
       marginBottom: 8
     }
-  }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421. \u0417\u0430\u043A\u0430\u0437\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430 \u043F\u0435\u0440\u0435\u0439\u0434\u0443\u0442 \u043D\u0430 \u043D\u0435\u0433\u043E, \u0430 \u0446\u0435\u043D\u044B, \u0434\u043E\u043B\u0433 \u0438 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u0432\u043E\u0437\u044C\u043C\u0443\u0442\u0441\u044F \u0438\u0437 1\u0421."), React.createElement(LiveState, {
+  }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421. \u0417\u0430\u043A\u0430\u0437\u044B \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430 \u043F\u0435\u0440\u0435\u0439\u0434\u0443\u0442 \u043D\u0430 \u043D\u0435\u0433\u043E, \u0430 \u0446\u0435\u043D\u044B, \u0434\u043E\u043B\u0433 \u0438 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440 \u0432\u043E\u0437\u044C\u043C\u0443\u0442\u0441\u044F \u0438\u0437 1\u0421."), React.createElement(Field, {
+    label: "\u041D\u0430\u0439\u0442\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 1\u0421",
+    value: find,
+    onChange: e => setFind(e.target.value),
+    placeholder: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435, \u0442\u0435\u043B\u0435\u0444\u043E\u043D \u0438\u043B\u0438 \u043A\u043E\u0434"
+  }), React.createElement(LiveState, {
     loading: sug.loading,
     error: sug.error,
     onRetry: sug.reload,
-    empty: sug.data && !sug.data.length ? "Похожих клиентов не нашли — введите код ниже" : null
+    empty: sug.data && !sug.data.length ? find.trim().length >= 2 ? "Никого не нашли — проверьте название или телефон" : "Похожих клиентов не нашли — найдите по названию выше" : null
   }), (sug.data || []).map(c => React.createElement("div", {
     key: c.code,
     className: "flex items-center gap-2 py-2.5",
@@ -8810,7 +8818,7 @@ function ShopLinkModal({
   }, "\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C"))), React.createElement("div", {
     className: "mt-4"
   }, React.createElement(Field, {
-    label: "\u0418\u043B\u0438 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 \u043A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421",
+    label: "\u0418\u043B\u0438 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u043E\u0447\u043D\u044B\u0439 \u043A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430 \u0438\u0437 1\u0421",
     value: code,
     onChange: e => setCode(e.target.value),
     placeholder: "\u041A\u043E\u0434 \u043A\u043B\u0438\u0435\u043D\u0442\u0430"
@@ -9068,7 +9076,7 @@ function AdminLiveApp({
     spread: tabs.length <= 6,
     brand: React.createElement(NavBrand, {
       title: "Sapar Trade",
-      sub: "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440"
+      sub: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440"
     })
   }), pwd && React.createElement(LivePasswordModal, {
     session: session,
@@ -9428,7 +9436,7 @@ function TpOrder({
       color: "var(--muted)",
       marginTop: 8
     }
-  }, "\u0417\u0430\u043A\u0430\u0437 \u043F\u043E\u043F\u0430\u0434\u0451\u0442 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0443 \u0438 \u0432 1\u0421 (\u0440\u0435\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u044F, \u043D\u0435\u043F\u0440\u043E\u0432\u0435\u0434\u0451\u043D\u043D\u0430\u044F \u2014 \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 \u0438 \u043F\u0440\u043E\u0432\u0435\u0434\u0451\u0442).")));
+  }, "\u0417\u0430\u043A\u0430\u0437 \u043F\u043E\u043F\u0430\u0434\u0451\u0442 \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u0443 \u0438 \u0432 1\u0421 (\u0440\u0435\u0430\u043B\u0438\u0437\u0430\u0446\u0438\u044F, \u043D\u0435\u043F\u0440\u043E\u0432\u0435\u0434\u0451\u043D\u043D\u0430\u044F \u2014 \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442 \u0438 \u043F\u0440\u043E\u0432\u0435\u0434\u0451\u0442).")));
 }
 const TP_TABS = {
   stores: ["store", "Магазины"],

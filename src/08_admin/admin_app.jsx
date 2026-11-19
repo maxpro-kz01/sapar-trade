@@ -39,7 +39,7 @@ function AdminLiveApp({ session, setSession, onExit }) {
         {tab === "settings" && <AdminSettingsLive {...p} />}
       </div>
       <AppNav items={tabs.map((id) => ({ id, icon: ADMIN_TABS[id][0], label: ADMIN_TABS[id][1] }))} active={tab} onPick={setTab} spread={tabs.length <= 6}
-        brand={<NavBrand title="Sapar Trade" sub="Администратор" />} />
+        brand={<NavBrand title="Sapar Trade" sub="Оператор" />} />
       {pwd && <LivePasswordModal session={session} onClose={() => setPwd(false)}
         onChanged={(token) => { setSession({ ...session, token }); setPwd(false); showToast("Пароль изменён"); }} />}
       <Toast toast={toast} />

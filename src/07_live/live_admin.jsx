@@ -3,7 +3,7 @@
 
 const LIVE_ENTITY_NAMES = { products: "Товары", warehouses: "Склады", clients: "Клиенты", prices: "Цены", stock: "Остатки", debts: "Долги клиентов", sales: "Продажи", cost: "Себестоимость",
   client_agents: "ТП клиентов", cash: "Остатки денег", cashflow: "Движение денег", cf_articles: "Статьи движения денег" };
-const LIVE_ROLES = { owner: "Владелец", director: "Директор", supervisor: "Супервайзер", tp: "Торговый представитель", accountant: "Бухгалтер", financier: "Финансист", warehouse: "Склад", admin: "Администратор", driver: "Водитель-экспедитор" };
+const LIVE_ROLES = { owner: "Владелец", director: "Директор", supervisor: "Супервайзер", tp: "Торговый представитель", accountant: "Бухгалтер", financier: "Финансист", warehouse: "Склад", admin: "Оператор", driver: "Водитель-экспедитор" };
 
 function LiveSync({ session, authLost }) {
   const r = useLive(session, "/api/sync/status", authLost);

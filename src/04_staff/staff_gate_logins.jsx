@@ -22,7 +22,7 @@ function StaffGate({ onCancel, onPick }) {
         <button onClick={() => onPick("admin")} className="rounded-2xl p-4 mb-3 flex items-center gap-3 press-98" style={{ border: "1.5px solid var(--line)", background: "#fff" }}>
           <div className="rounded-xl p-2.5" style={{ background: "#EEF0FF" }}><Ico name="shield-check" size={18} color="var(--navy)" /></div>
           <div className="flex-1 text-left">
-            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Администратор</p>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>Оператор</p>
             <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Смена, заказы, склад, отчёт директору</p>
           </div>
           <Ico name="arrow-left" size={16} color="var(--muted)" style={{ transform: "rotate(180deg)" }} />

@@ -11,7 +11,7 @@ const r = Router();
 
 r.get("/shops/diag", requireAuth, ah(async (req, res) => res.json(await sa.catalogDiag(req.user))));
 r.get("/shops", requireAuth, ah(async (req, res) => res.json(await sa.listShops(req.user, req.query))));
-r.get("/shops/:id/suggest", requireAuth, ah(async (req, res) => res.json(await sa.suggestClients(req.user, req.params.id))));
+r.get("/shops/:id/suggest", requireAuth, ah(async (req, res) => res.json(await sa.suggestClients(req.user, req.params.id, req.query.q))));
 r.post("/shops/:id/link", requireAuth, ah(async (req, res) => {
   const out = await sa.linkShop(req.user, req.params.id, req.body?.clientCode);
   await audit(req, "shop.link", req.params.id, { clientCode: out.clientCode });

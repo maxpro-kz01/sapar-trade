@@ -88,7 +88,7 @@ function TpOrder({ session, authLost, store, catalog, cart, setCart, onBack, onD
           <Field label="Доставка" type="date" value={delivery} onChange={(e) => setDelivery(e.target.value)} />
           <Field label="Комментарий" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Например: до обеда" />
           <PrimaryButton full disabled={busy} onClick={send}>{busy ? "Отправляем…" : "Отправить заказ"}</PrimaryButton>
-          <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8 }}>Заказ попадёт администратору и в 1С (реализация, непроведённая — оператор проверит и проведёт).</p>
+          <p style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 8 }}>Заказ попадёт оператору и в 1С (реализация, непроведённая — оператор проверит и проведёт).</p>
         </Modal>
       )}
     </>

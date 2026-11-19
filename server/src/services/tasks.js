@@ -40,7 +40,7 @@ async function checkAssignee(id) {
 }
 
 export async function createTask(user, b) {
-  if (!can(user, "tasks.create")) throw new HttpError(403, "Ставить задачи могут владелец, директор и администратор");
+  if (!can(user, "tasks.create")) throw new HttpError(403, "Ставить задачи могут владелец, директор и оператор");
   const title = String(b?.title || "").trim().slice(0, 300);
   if (!title) throw new HttpError(400, "Введите название задачи");
   if (b.deadline && !isIsoDate(b.deadline)) throw new HttpError(400, "Срок в формате ГГГГ-ММ-ДД");

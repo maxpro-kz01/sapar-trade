@@ -9,7 +9,7 @@ function shiftReportText(r) {
   L.push("*ОТЧЁТ ЗА СМЕНУ — ИП «Sapar Trade»*");
   L.push("Дата: " + stFmtDate(r.day));
   L.push("Смена: " + shiftHM(r.from) + " — " + shiftHM(r.to) + "  (" + shiftLen(r.from, r.to) + ")");
-  L.push("Администратор: " + r.adminName);
+  L.push("Оператор: " + r.adminName);
   L.push("");
   L.push("🧾 *ЗАКАЗЫ В ПРИЛОЖЕНИИ: " + o.count + "*");
   L.push("Сумма: " + stMoney(o.total) + (o.avg ? " · средний " + stMoney(o.avg) : ""));

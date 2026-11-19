@@ -65,6 +65,16 @@ test("каталог: у товара нет цены магазина — бе�
   await pool.query("DELETE FROM onec_products WHERE code = 'P5'");
 });
 
+test("привязка: оператор ищет клиента 1С по названию, коду и телефону", async () => {
+  const shop = (await api("GET", "/api/shops?filter=new", { token: tok.adm })).body.find((s) => s.name === "Мини-маркет Заря");
+  const find = async (q) => (await api("GET", `/api/shops/${shop.id}/suggest?q=${encodeURIComponent(q)}`, { token: tok.adm })).body.map((c) => c.code);
+  assert.deepEqual(await find("Нур"), ["C1"], "по названию");
+  assert.deepEqual(await find("c1"), ["C1"], "по коду");
+  assert.deepEqual(await find("701 123"), ["C1"], "по части телефона");
+  assert.deepEqual(await find("нет такого"), []);
+  assert.equal((await api("GET", `/api/shops/${shop.id}/suggest?q=Нур`, { token: tok.tp1 })).status, 403);
+});
+
 test("проверка каталога: сотрудникам — цифры по типам цен; магазину и ТП — нельзя", async () => {
   const d = await api("GET", "/api/shops/diag", { token: tok.owner });
   assert.equal(d.status, 200, d.raw);

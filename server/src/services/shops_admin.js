@@ -24,10 +24,19 @@ export async function listShops(user, { filter } = {}) {
 }
 
 // Подсказка для привязки: клиенты 1С с похожим названием или тем же телефоном
-export async function suggestClients(user, shopId) {
+export async function suggestClients(user, shopId, search) {
   need(user, "shops");
   const { rows: [s] } = await q("SELECT * FROM shops WHERE id = $1", [Number(shopId) || 0]);
   if (!s) throw new HttpError(404, "Магазин не найден");
+  const term = String(search || "").trim().slice(0, 60);
+  if (term.length >= 2) { // ручной поиск оператора: по названию, коду или части телефона
+    const like = `%${term.replace(/[%_\\]/g, "")}%`, digits = term.replace(/\D/g, "");
+    const { rows } = await q(
+      `SELECT code, name, address, phone, manager FROM onec_clients
+       WHERE name ILIKE $1 OR code ILIKE $1 OR ($2 <> '' AND regexp_replace(coalesce(phone, ''), '\\D', '', 'g') LIKE '%' || $2 || '%')
+       ORDER BY name LIMIT 30`, [like, digits]);
+    return rows;
+  }
   const { rows } = await q(
     `SELECT code, name, address, phone, manager FROM onec_clients
      WHERE (phone IS NOT NULL AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1) OR name ILIKE $2 ORDER BY name LIMIT 20`,
