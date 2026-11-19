@@ -47,6 +47,24 @@ test("новый магазин получает «Цена Прайс»", async
   assert.equal(c.body.items.find((i) => i.code === "P1").price, 16000);
 });
 
+test("каталог: у товара нет цены магазина — берём «Оптовая», в заказе та же цена", async () => {
+  await pool.query("INSERT INTO onec_products(code, name, group_name, unit) VALUES ('P5','Только оптовая','Масла','шт')");
+  await pool.query("INSERT INTO onec_prices(product_code, price_type, price) VALUES ('P5','Оптовая',500)");
+  await pool.query("INSERT INTO onec_stock(warehouse_code, product_code, qty) VALUES ('W','P5',50)");
+  const c = await api("GET", "/api/shop/catalog", { token: sh.new });
+  assert.equal(c.body.items.find((i) => i.code === "P5")?.price, 500, "новый магазин (Цена Прайс) видит позицию по оптовой цене");
+  assert.equal(c.body.items.find((i) => i.code === "P1").price, 16000, "своя цена важнее запасной");
+  const o = await api("POST", "/api/shop/orders", { token: sh.new, body: { items: [{ code: "P5", qty: 2 }], payment: "cash" } });
+  assert.equal(o.status, 201, o.raw);
+  assert.equal(o.body.total, 1000);
+  await pool.query("DELETE FROM order_items WHERE order_id = $1", [o.body.id]);
+  await pool.query("DELETE FROM order_events WHERE order_id = $1", [o.body.id]);
+  await pool.query("DELETE FROM orders WHERE id = $1", [o.body.id]);
+  await pool.query("DELETE FROM onec_stock WHERE product_code = 'P5'");
+  await pool.query("DELETE FROM onec_prices WHERE product_code = 'P5'");
+  await pool.query("DELETE FROM onec_products WHERE code = 'P5'");
+});
+
 test("заказ: цену и сумму считает сервер, клиентской цене не верим", async () => {
   const r = await api("POST", "/api/shop/orders", { token: sh.nur, body: { items: [{ code: "P1", qty: 2, price: 1 }, { code: "P3", qty: 10 }], payment: "cash" } });
   assert.equal(r.status, 201, r.raw);

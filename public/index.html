@@ -6,7 +6,7 @@
 <title>ИП Sapar Trade — оптово-розничная торговля</title>
 <meta name="theme-color" content="#1B1464" />
 <meta name="st-api" content="https://sapar-trade-api.onrender.com" />
-<meta name="st-build" content="cfa0db09a1e0" />
+<meta name="st-build" content="f3f4697f2907" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -7605,7 +7605,7 @@ function MgTasks({
     onClick: () => setFilter(id)
   }, l)), React.createElement("div", {
     className: "flex-1"
-  }), React.createElement("button", {
+  }), liveCan(session, "tasks.create") && React.createElement("button", {
     onClick: () => setForm({
       title: "",
       assigneeId: me,
@@ -8941,11 +8941,12 @@ const ADMIN_TABS = {
   stock: ["package", "Склад"],
   staff: ["users", "Сотрудники"],
   shops: ["building", "Магазины"],
+  tasks: ["clipboard", "Задачи"],
   settings: ["settings", "Настройки"]
 };
 function adminTabsFor(session) {
   const can = (...p) => liveCan(session, ...p);
-  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("settings") && "settings"].filter(Boolean);
+  return [can("shift") && "shift", can("orders.all") && "orders", can("stock") && "stock", can("users") && "staff", can("shops") && "shops", can("tasks.all", "tasks.create") && "tasks", can("settings") && "settings"].filter(Boolean);
 }
 function AdminLiveApp({
   session,
@@ -9023,7 +9024,7 @@ function AdminLiveApp({
     color: "var(--red)"
   }))), React.createElement("div", {
     className: "flex-1 overflow-y-auto pb-24 px-5 pt-1 font-body kz-main"
-  }, tab === "shift" && React.createElement(AdminShiftLive, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "stock" && React.createElement(MgStock, p), tab === "staff" && React.createElement(LiveUsers, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "settings" && React.createElement(AdminSettingsLive, p)), React.createElement(AppNav, {
+  }, tab === "shift" && React.createElement(AdminShiftLive, p), tab === "orders" && React.createElement(OrdersBoard, p), tab === "stock" && React.createElement(MgStock, p), tab === "staff" && React.createElement(LiveUsers, p), tab === "shops" && React.createElement(AdminShopsLive, p), tab === "tasks" && React.createElement(MgTasks, p), tab === "settings" && React.createElement(AdminSettingsLive, p)), React.createElement(AppNav, {
     items: tabs.map(id => ({
       id,
       icon: ADMIN_TABS[id][0],

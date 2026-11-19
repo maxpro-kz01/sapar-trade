@@ -3,7 +3,7 @@
 import { q, tx } from "../db/pool.js";
 import { config } from "../config.js";
 import { HttpError, isIsoDate } from "../lib/http.js";
-import { priceTypeFor, round2, freshness, overdueDate, overdueSql } from "./scope.js";
+import { priceTypeFor, priceType, round2, freshness, overdueDate, overdueSql } from "./scope.js";
 import { getSettings } from "./settings.js";
 import { orderNumber } from "./orders.js";
 import { creditInfo, assertCanBuyOnCredit } from "./credit.js";
@@ -15,12 +15,16 @@ export const clientCodeOf = (shop) => shop.client_code || `NEW-${shop.id}`;
 
 export async function shopCatalog(shop) {
   const pt = await priceTypeFor(shop.client_code);
+  // решение 19.11.2026: если у товара нет цены типа магазина — берём цену самого полного типа («Оптовая»)
+  const fb = await priceType();
   const { rows } = await q(
-    `SELECT pr.code, pr.name, coalesce(pr.group_name, 'Без группы') AS grp, pr.unit, p.price, coalesce(st.qty, 0) > 0 AS in_stock
+    `SELECT pr.code, pr.name, coalesce(pr.group_name, 'Без группы') AS grp, pr.unit, coalesce(NULLIF(p.price, 0), f.price) AS price, coalesce(st.qty, 0) > 0 AS in_stock
      FROM onec_products pr
-     JOIN onec_prices p ON p.product_code = pr.code AND p.price_type = $1 AND p.price > 0
+     LEFT JOIN onec_prices p ON p.product_code = pr.code AND p.price_type = $1
+     LEFT JOIN onec_prices f ON f.product_code = pr.code AND f.price_type = $2 AND f.price > 0
      LEFT JOIN (SELECT product_code, sum(qty) AS qty FROM onec_stock GROUP BY 1) st ON st.product_code = pr.code
-     ORDER BY grp, pr.name`, [pt]);
+     WHERE coalesce(NULLIF(p.price, 0), f.price) > 0
+     ORDER BY grp, pr.name`, [pt, fb]);
   const items = rows.map((r) => ({ code: r.code, name: r.name, group: r.grp, unit: r.unit, price: Number(r.price), inStock: r.in_stock }));
   return { groups: [...new Set(items.map((i) => i.group))], items, ...(await freshness()) };
 }
@@ -41,11 +45,13 @@ export async function createShopOrder(shop, b) {
   if (Number(cnt.n) >= config.shopOrdersPerDay) throw new HttpError(429, "Слишком много заказов за сутки. Позвоните в офис");
 
   const pt = await priceTypeFor(shop.client_code);
+  const fb = await priceType();
   const { rows: prods } = await q(
-    `SELECT pr.code, pr.name, pr.unit, p.price, coalesce(st.qty, 0) AS stock FROM onec_products pr
+    `SELECT pr.code, pr.name, pr.unit, coalesce(NULLIF(p.price, 0), f.price) AS price, coalesce(st.qty, 0) AS stock FROM onec_products pr
      LEFT JOIN onec_prices p ON p.product_code = pr.code AND p.price_type = $1
+     LEFT JOIN onec_prices f ON f.product_code = pr.code AND f.price_type = $3 AND f.price > 0
      LEFT JOIN (SELECT product_code, sum(qty) AS qty FROM onec_stock GROUP BY 1) st ON st.product_code = pr.code
-     WHERE pr.code = ANY($2::text[])`, [pt, [...qtyByCode.keys()]]);
+     WHERE pr.code = ANY($2::text[])`, [pt, [...qtyByCode.keys()], fb]);
   const byCode = new Map(prods.map((p) => [p.code, p]));
   const lines = [...qtyByCode].map(([code, qty], i) => {
     const p = byCode.get(code);

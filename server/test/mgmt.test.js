@@ -13,7 +13,7 @@ before(async () => {
   env = await startEnv();
   api = env.api;
   tok.owner = await login(OWNER.login, OWNER.password);
-  for (const [l, role, m] of [["dir", "director"], ["tp1", "tp", "Ахметов Ержан"], ["sv1", "supervisor", "Ахметов Ержан, Иванов Пётр"], ["sklad", "warehouse"], ["buh", "accountant"]]) {
+  for (const [l, role, m] of [["dir", "director"], ["tp1", "tp", "Ахметов Ержан"], ["sv1", "supervisor", "Ахметов Ержан, Иванов Пётр"], ["sklad", "warehouse"], ["buh", "accountant"], ["adm", "admin"]]) {
     await api("POST", "/api/users", { token: tok.owner, body: { login: l, name: l, role, password: "Passw0rd1", manager1c: m } });
     tok[l] = await login(l, "Passw0rd1");
   }
@@ -127,6 +127,17 @@ test("задачи: создать, назначить, статус, комме
   const t = all.body.find((x) => x.id === c.body.id);
   assert.equal(t.status, "В работе");
   assert.equal(t.comments[0].text, "Договорился на пятницу");
+});
+
+test("задачи: ставят владелец, директор и администратор — друг другу и всем; остальные только исполняют", async () => {
+  const staff = (await api("GET", "/api/staff", { token: tok.owner })).body;
+  const id = (n) => (n === "owner" ? staff.find((x) => x.role === "owner") : staff.find((x) => x.name === n)).id;
+  const mk = (who, to) => api("POST", "/api/tasks", { token: tok[who], body: { title: `от ${who} для ${to}`, assigneeId: id(to) } });
+  for (const [a, b] of [["owner", "adm"], ["owner", "dir"], ["dir", "adm"], ["adm", "dir"], ["adm", "owner"], ["dir", "owner"], ["adm", "tp1"]])
+    assert.equal((await mk(a, b)).status, 201, `${a} -> ${b}`);
+  for (const w of ["tp1", "sv1", "sklad", "buh"]) assert.equal((await mk(w, "tp1")).status, 403, `${w} не должен ставить задачи`);
+  const seen = await api("GET", "/api/tasks", { token: tok.adm });
+  assert.ok(seen.body.some((t) => t.title === "от dir для adm") && seen.body.some((t) => t.title === "от owner для dir"), "администратор видит все задачи");
 });
 
 test("журнал действий — владелец и директор", async () => {

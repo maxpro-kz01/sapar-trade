@@ -1,5 +1,5 @@
 // Задачи сотрудникам (ТЗ V1.0 §19): создать, назначить, сменить статус, комментировать.
-// Видят: владелец и директор — все задачи; остальные — где они автор или исполнитель.
+// Создают и назначают любому: владелец, директор, администратор (они же видят все задачи); остальные видят где они автор или исполнитель.
 import { q, tx } from "../db/pool.js";
 import { can } from "./rbac.js";
 import { HttpError, isIsoDate } from "../lib/http.js";
@@ -40,6 +40,7 @@ async function checkAssignee(id) {
 }
 
 export async function createTask(user, b) {
+  if (!can(user, "tasks.create")) throw new HttpError(403, "Ставить задачи могут владелец, директор и администратор");
   const title = String(b?.title || "").trim().slice(0, 300);
   if (!title) throw new HttpError(400, "Введите название задачи");
   if (b.deadline && !isIsoDate(b.deadline)) throw new HttpError(400, "Срок в формате ГГГГ-ММ-ДД");

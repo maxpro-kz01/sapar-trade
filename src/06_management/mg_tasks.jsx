@@ -1,5 +1,5 @@
 // Sapar Trade — система управления. Модуль: Задачи (хранятся на сервере)
-// Создать и назначить, статус, срок, приоритет, комментарии. Владелец и директор видят все задачи, остальные — свои.
+// Создать и назначить, статус, срок, приоритет, комментарии. Создают и видят все задачи владелец, директор и администратор; остальные — свои.
 
 const MG_TASK_STATUSES = ["Новая", "В работе", "Выполнена", "Отменена"];
 const MG_PRIO_COLOR = { "Высокий": ["#FCE7E6", "#B3261E"], "Средний": ["#FFF6DE", "#8A5A00"], "Низкий": ["#F2F1F8", "var(--muted)"] };
@@ -27,9 +27,9 @@ function MgTasks({ session, authLost, showToast }) {
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
         {[["active", "Активные"], ["mine", "Мне"], ["all", "Все"]].map(([id, l]) => <LiveChip key={id} on={filter === id} onClick={() => setFilter(id)}>{l}</LiveChip>)}
         <div className="flex-1" />
-        <button onClick={() => setForm({ title: "", assigneeId: me, deadline: "", priority: "Средний", description: "" })} className="shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1" style={{ fontSize: 11.5, background: "var(--navy)", color: "#fff", fontWeight: 700 }}>
+        {liveCan(session, "tasks.create") && <button onClick={() => setForm({ title: "", assigneeId: me, deadline: "", priority: "Средний", description: "" })} className="shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1" style={{ fontSize: 11.5, background: "var(--navy)", color: "#fff", fontWeight: 700 }}>
           <Ico name="plus" size={13} color="#fff" />Новая задача
-        </button>
+        </button>}
       </div>
       <LiveState {...r} onRetry={r.reload} empty={r.data && !list.length ? "Задач нет" : null} />
       <div className="kz-list">
