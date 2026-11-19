@@ -16,7 +16,9 @@
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all",
                "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash"],
-  director:   ["sales", "margin", "stock", "debts", "sync", "team", "plans.edit", "tasks.all", "orders.create", "orders.all", "orders.manage", "fleet.view", "cash.in"],
+  // директор — те же права, что у владельца (решение 19.11.2026). Управлять владельцем и другими директорами не может (users.js: TOP)
+  director:   ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all",
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],

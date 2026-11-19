@@ -38,7 +38,7 @@ test("продажи по группам и менеджерам; приблиз
   assert.equal(ah.cost, 38000, "себестоимость: 24000 + 14000 по единичной себестоимости");
   assert.equal(m.body.approxCost, true);
   const d = await api("GET", `/api/sales?group=manager&${range}`, { token: tok.dir });
-  assert.ok(!/"(cost|gross)"/.test(d.raw) && /"marginPct"/.test(d.raw));
+  assert.ok(/"gross"/.test(d.raw) && /"marginPct"/.test(d.raw), "директор видит и валовую прибыль");
 });
 
 test("команда: рейтинг ТП, план и план/факт", async () => {
@@ -61,7 +61,7 @@ test("команда: рейтинг ТП, план и план/факт", async
   assert.ok(ah.gross !== undefined);
 
   const dt = await api("GET", `/api/team?from=${mStart}&to=${day(0)}`, { token: tok.dir });
-  assert.ok(!/"(cost|gross)"/.test(dt.raw) && /"marginPct"/.test(dt.raw));
+  assert.ok(/"gross"/.test(dt.raw) && /"marginPct"/.test(dt.raw));
   const tp = await api("GET", `/api/team?from=${mStart}&to=${day(0)}`, { token: tok.tp1 });
   assert.deepEqual(tp.body.items.map((x) => x.manager), ["Ахметов Ержан"]);
   assert.ok(!/"marginPct"/.test(tp.raw));
@@ -72,12 +72,13 @@ test("команда: рейтинг ТП, план и план/факт", async
   assert.equal((await api("GET", `/api/team?${range}`, { token: tok.buh })).status, 403);
 });
 
-test("финансы: только владелец", async () => {
+test("финансы: владелец и директор", async () => {
   const f = await api("GET", `/api/finance?${range}`, { token: tok.owner });
   assert.equal(f.status, 200);
   assert.equal(f.body.totals.gross, 19000);
   assert.ok(f.body.groups.length >= 2);
-  for (const u of ["dir", "buh", "tp1", "sklad"]) assert.equal((await api("GET", `/api/finance?${range}`, { token: tok[u] })).status, 403, u);
+  assert.equal((await api("GET", `/api/finance?${range}`, { token: tok.dir })).status, 200);
+  for (const u of ["buh", "tp1", "sklad"]) assert.equal((await api("GET", `/api/finance?${range}`, { token: tok[u] })).status, 403, u);
 });
 
 test("клиенты: возраст долга и итоги", async () => {
@@ -128,7 +129,8 @@ test("задачи: создать, назначить, статус, комме
   assert.equal(t.comments[0].text, "Договорился на пятницу");
 });
 
-test("журнал действий — только владелец", async () => {
+test("журнал действий — владелец и директор", async () => {
   assert.equal((await api("GET", "/api/audit", { token: tok.owner })).status, 200);
-  assert.equal((await api("GET", "/api/audit", { token: tok.dir })).status, 403);
+  assert.equal((await api("GET", "/api/audit", { token: tok.dir })).status, 200);
+  assert.equal((await api("GET", "/api/audit", { token: tok.buh })).status, 403);
 });

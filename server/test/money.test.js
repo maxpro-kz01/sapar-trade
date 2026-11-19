@@ -150,7 +150,7 @@ test("загрузка денег: остатки, статьи, движени�
     "Выплаты по заработной плате": "expense", "Расходы Сапар": "expense", "ГСМ": "expense", "Новая статья": "expense", "": "none" });
 });
 
-test("деньги: владелец и бухгалтер видят всё, директор — только поступления", async () => {
+test("деньги: владелец, директор и бухгалтер видят всё", async () => {
   const o = await api("GET", `/api/money?${range}`, { token: tok.owner });
   assert.equal(o.status, 200, o.raw);
   assert.equal(o.body.balances.accounts.length, 3);
@@ -169,12 +169,11 @@ test("деньги: владелец и бухгалтер видят всё, д
   const d = await api("GET", `/api/money?${range}`, { token: tok.dir });
   assert.equal(d.status, 200);
   assert.equal(d.body.received.total, 800000);
-  assert.equal(d.body.balances, undefined);
-  assert.equal(d.body.flow, undefined);
+  assert.ok(d.body.balances && d.body.flow, "директор видит остатки и движение денег, как владелец");
   for (const u of ["aida", "sklad", "adm"]) assert.equal((await api("GET", `/api/money?${range}`, { token: tok[u] })).status, 403, u);
 });
 
-test("P&L: расходы и чистая прибыль (только владелец)", async () => {
+test("P&L: расходы и чистая прибыль (владелец и директор)", async () => {
   const f = await api("GET", `/api/finance?${range}`, { token: tok.owner });
   assert.equal(f.status, 200, f.raw);
   // валовая: выручка 78000 − себестоимость 59000 = 19000; расходы 30000+15000+6000−1000+2000 = 52000
@@ -185,7 +184,8 @@ test("P&L: расходы и чистая прибыль (только влад�
   assert.equal(f.body.months.length, 6);
   assert.equal(f.body.months.at(-1).expenses, 52000);
   assert.equal(f.body.notYet, undefined);
-  for (const u of ["dir", "buh"]) assert.equal((await api("GET", `/api/finance?${range}`, { token: tok[u] })).status, 403, u);
+  assert.equal((await api("GET", `/api/finance?${range}`, { token: tok.dir })).status, 200);
+  assert.equal((await api("GET", `/api/finance?${range}`, { token: tok.buh })).status, 403);
 });
 
 test("статьи: владелец меняет группу, повторная загрузка её не сбрасывает", async () => {
@@ -194,7 +194,7 @@ test("статьи: владелец меняет группу, повторна
   const n = l.body.items.find((x) => x.article === "Новая статья");
   assert.equal(n.isNew, true);
   assert.equal(n.out30, 2000);
-  assert.equal((await api("PUT", "/api/cf-articles", { token: tok.dir, body: { article: "Расходы Сапар", grp: "loan" } })).status, 403);
+  assert.equal((await api("PUT", "/api/cf-articles", { token: tok.buh, body: { article: "Расходы Сапар", grp: "loan" } })).status, 403);
   assert.equal((await api("PUT", "/api/cf-articles", { token: tok.owner, body: { article: "Расходы Сапар", grp: "плохая" } })).status, 400);
   assert.equal((await api("PUT", "/api/cf-articles", { token: tok.owner, body: { article: "Нет такой", grp: "loan" } })).status, 404);
   const p = await api("PUT", "/api/cf-articles", { token: tok.owner, body: { article: "Новая статья", grp: "loan" } });

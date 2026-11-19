@@ -55,7 +55,11 @@ test("админ не может создать владельца/директ�
   assert.equal(r.status, 403);
   const list = await api("GET", "/api/users", { token: tokens.adm });
   assert.ok(!list.body.some((u) => ["owner", "director"].includes(u.role)));
-  assert.equal((await api("GET", "/api/users", { token: tokens.dir })).status, 403);
+  // директор управляет сотрудниками, но владельца и других директоров не видит и не создаёт
+  const dl = await api("GET", "/api/users", { token: tokens.dir });
+  assert.equal(dl.status, 200);
+  assert.ok(!dl.body.some((u) => ["owner", "director"].includes(u.role)));
+  assert.equal((await api("POST", "/api/users", { token: tokens.dir, body: { login: "boss3", name: "x", role: "owner", password: "Passw0rd1" } })).status, 403);
 });
 
 test("агент: без ключа и с неверным ключом → 401", async () => {
@@ -121,11 +125,11 @@ test("владелец: видит выручку, себестоимость, �
   assert.ok(r.body.topProducts[0].gross !== undefined);
 });
 
-test("директор: маржа % есть, себестоимости и валовой в тенге нет нигде", async () => {
+test("директор: видит маржу, себестоимость и валовую прибыль, как владелец", async () => {
   for (const path of [`/api/dashboard?from=${range.from}&to=${range.to}`, `/api/sales?group=product&from=${range.from}&to=${range.to}`, `/api/sales?group=day&from=${range.from}&to=${range.to}`]) {
     const r = await api("GET", path, { token: tokens.dir });
     assert.equal(r.status, 200);
-    assert.ok(!/"(cost|gross|costTotal|grossTotal)"/.test(r.raw), `${path}: ${r.raw.slice(0, 300)}`);
+    assert.ok(/"gross"/.test(r.raw), path);
     assert.ok(/"marginPct"/.test(r.raw), path);
   }
 });
