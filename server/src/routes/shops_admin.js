@@ -9,6 +9,7 @@ import { audit } from "../services/audit.js";
 
 const r = Router();
 
+r.get("/shops/diag", requireAuth, ah(async (req, res) => res.json(await sa.catalogDiag(req.user))));
 r.get("/shops", requireAuth, ah(async (req, res) => res.json(await sa.listShops(req.user, req.query))));
 r.get("/shops/:id/suggest", requireAuth, ah(async (req, res) => res.json(await sa.suggestClients(req.user, req.params.id))));
 r.post("/shops/:id/link", requireAuth, ah(async (req, res) => {

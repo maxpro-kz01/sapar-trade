@@ -4,6 +4,7 @@ import { can } from "./rbac.js";
 import { HttpError } from "../lib/http.js";
 import { prettyPhone } from "./shop_auth.js";
 import { creditInfo } from "./credit.js";
+import { priceTypeFor, priceType } from "./scope.js";
 
 const need = (user, perm) => { if (!can(user, perm)) throw new HttpError(403, "Нет доступа"); };
 
@@ -60,4 +61,17 @@ export async function setShopStatus(user, shopId, status) {
 export async function clientCredit(user, clientCode) {
   need(user, "credit");
   return creditInfo(String(clientCode));
+}
+
+// Почему в каталоге магазина мало товаров: сколько товаров в базе и сколько цен каждого типа пришло из 1С.
+export async function catalogDiag(user) {
+  need(user, "shops");
+  const [{ rows: [p] }, { rows: types }] = await Promise.all([
+    q(`SELECT (SELECT count(*) FROM onec_products) AS products,
+              (SELECT count(*) FROM (SELECT product_code FROM onec_stock GROUP BY 1 HAVING sum(qty) > 0) x) AS in_stock`),
+    q("SELECT price_type AS name, count(*) FILTER (WHERE price > 0) AS n FROM onec_prices GROUP BY 1 ORDER BY 2 DESC, 1")]);
+  const newShop = await priceTypeFor(null), fallback = await priceType();
+  const n = (name) => Number(types.find((t) => t.name === name)?.n || 0);
+  return { products: Number(p.products), inStock: Number(p.in_stock), priceTypes: types.map((t) => ({ name: t.name, n: Number(t.n) })),
+    newShopType: newShop, newShopCount: n(newShop), fallbackType: fallback, fallbackCount: n(fallback) };
 }

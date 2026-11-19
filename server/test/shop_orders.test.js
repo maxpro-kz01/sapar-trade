@@ -65,6 +65,16 @@ test("каталог: у товара нет цены магазина — бе�
   await pool.query("DELETE FROM onec_products WHERE code = 'P5'");
 });
 
+test("проверка каталога: сотрудникам — цифры по типам цен; магазину и ТП — нельзя", async () => {
+  const d = await api("GET", "/api/shops/diag", { token: tok.owner });
+  assert.equal(d.status, 200, d.raw);
+  assert.equal(d.body.products, 4);
+  assert.ok(d.body.priceTypes.some((t) => t.name === "Оптовая" && t.n === 3));
+  assert.equal((await api("GET", "/api/shops/diag", { token: tok.adm })).status, 200);
+  assert.equal((await api("GET", "/api/shops/diag", { token: tok.tp1 })).status, 403);
+  assert.equal((await api("GET", "/api/shops/diag", { token: sh.nur })).status, 401);
+});
+
 test("заказ: цену и сумму считает сервер, клиентской цене не верим", async () => {
   const r = await api("POST", "/api/shop/orders", { token: sh.nur, body: { items: [{ code: "P1", qty: 2, price: 1 }, { code: "P3", qty: 10 }], payment: "cash" } });
   assert.equal(r.status, 201, r.raw);

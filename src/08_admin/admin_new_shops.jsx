@@ -35,6 +35,21 @@ function ShopLinkModal({ session, shop, onClose, onDone }) {
   );
 }
 
+// Проверка каталога: сколько товаров в базе и сколько цен каждого типа пришло из 1С (почему магазин видит мало товаров)
+function ShopCatalogDiag({ session, authLost }) {
+  const d = useLive(session, "/api/shops/diag", authLost);
+  const x = d.data;
+  if (!x) return null;
+  return (
+    <MgCard>
+      <p style={{ fontSize: 12.5, fontWeight: 800 }}>Что видят магазины в каталоге</p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Товаров в базе: <b>{x.products}</b> · есть на складе: <b>{x.inStock}</b></p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)" }}>Новый магазин: «{x.newShopType}» — цен: <b>{x.newShopCount}</b>. Запасная цена: «{x.fallbackType}» — цен: <b>{x.fallbackCount}</b></p>
+      <p style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Цены из 1С по типам: {x.priceTypes.length ? x.priceTypes.map((t) => t.name + " — " + t.n).join(" · ") : "нет"}</p>
+    </MgCard>
+  );
+}
+
 function AdminShopsLive({ session, authLost, showToast }) {
   const [filter, setFilter] = useState("new");
   const r = useLive(session, "/api/shops?" + stQs({ filter: filter === "all" ? "" : filter }), authLost);
@@ -45,6 +60,7 @@ function AdminShopsLive({ session, authLost, showToast }) {
   };
   return (
     <>
+      <ShopCatalogDiag session={session} authLost={authLost} />
       <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
         <LiveChip on={filter === "new"} onClick={() => setFilter("new")}>Ждут привязки</LiveChip>
         <LiveChip on={filter === "all"} onClick={() => setFilter("all")}>Все</LiveChip>
