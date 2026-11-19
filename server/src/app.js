@@ -10,6 +10,7 @@ import mgmtRoutes from "./routes/mgmt.js";
 import orderRoutes from "./routes/orders.js";
 import shopRoutes from "./routes/shop.js";
 import shopsAdminRoutes from "./routes/shops_admin.js";
+import routesRoutes from "./routes/routes.js";
 import fleetRoutes, { traccarRoutes } from "./routes/fleet.js";
 
 export function createApp() {
@@ -25,6 +26,7 @@ export function createApp() {
   // агенту 1С нужны большие пакеты, остальным — маленькие
   app.use("/api/sync/1c", express.json({ limit: "25mb" }));
   app.use("/api/fleet/traccar", express.urlencoded({ extended: false, limit: "20kb" })); // Traccar Client может слать форму
+  app.use("/api/payment-qr", express.json({ limit: "900kb" })); // картинки QR (до ~400 КБ) больше обычного лимита
   app.use(express.json({ limit: "200kb" }));
 
   app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
@@ -36,6 +38,7 @@ export function createApp() {
   app.use("/api", shopsAdminRoutes);
   app.use("/api", reportRoutes);
   app.use("/api", mgmtRoutes);
+  app.use("/api", routesRoutes);
   app.use("/api", orderRoutes);
   app.use("/api/fleet", fleetRoutes);
 

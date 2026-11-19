@@ -29,6 +29,13 @@ export async function problems(user) {
     if (Number(n.fresh) > 0) list.push({ lvl: "yellow", code: "shoporders", title: `Новые заказы от магазинов: ${n.fresh}`, detail: "Магазины заказали сами — примите заказы", tab: "orders" });
   }
 
+  if (can(user, "routes")) {
+    const { rows: [f] } = await q(
+      `SELECT count(*) AS n FROM route_stops st JOIN route_sheets sh ON sh.id = st.sheet_id
+       WHERE st.status = 'failed' AND st.done_at > now() - interval '24 hours' AND sh.sent_at IS NOT NULL AND st.fail_reason IS DISTINCT FROM 'Закрыт оператором'`);
+    if (Number(f.n) > 0) list.push({ lvl: "yellow", code: "routefail", title: `Водитель не довёз заказы: ${f.n}`, detail: "Магазин не принял — решите, куда их дальше (заказы остались «Собран»)", tab: "routes" });
+  }
+
   if (scopeOf(user, "debts")) {
     const p = [overdueDate(), shiftDay(t, -30)];
     const f = clientFilter(user, "debts", "d", p);

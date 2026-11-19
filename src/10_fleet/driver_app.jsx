@@ -65,6 +65,7 @@ function DriverApp({ session, setSession, onExit }) {
         {trip === undefined && <LiveState loading />}
         {trip !== undefined && (
           <>
+            <DriverRoute session={session} authLost={authLost} showToast={showToast} gps={gps} />
             <div className="rounded-2xl p-5 mb-3 text-center" data-testid="trip-card" style={{ background: onTrip ? "#E3F5E9" : "#fff", border: "1px solid " + (onTrip ? "#BFE6CB" : "var(--line)") }}>
               <div className="mx-auto mb-3 rounded-full flex items-center justify-center" style={{ width: 72, height: 72, background: onTrip ? "#1FA854" : "#F2F1F8" }}>
                 <Ico name="map-pin" size={32} color={onTrip ? "#fff" : "var(--muted)"} />

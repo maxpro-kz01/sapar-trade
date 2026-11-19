@@ -47,6 +47,7 @@ function MgmtApp({ session, setSession, onExit }) {
         {tab === "stock" && <MgStock key={JSON.stringify(param)} {...p} />}
         {tab === "finance" && <MgFinance {...p} />}
         {tab === "problems" && <MgProblems {...p} />}
+        {tab === "routes" && <AdminRoutes {...p} />}
         {tab === "tasks" && <MgTasks {...p} />}
         {tab === "shops" && <AdminShopsLive {...p} />}
         {tab === "ai" && <MgAI {...p} />}

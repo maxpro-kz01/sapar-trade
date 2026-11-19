@@ -54,6 +54,9 @@ export async function linkShop(user, shopId, clientCode) {
   await tx(async (t) => {
     await t.query("UPDATE shops SET client_code = $2 WHERE id = $1", [s.id, c.code]);
     await t.query("UPDATE orders SET client_code = $2, client_name = $3, manager = $4 WHERE shop_id = $1", [s.id, c.code, c.name, c.manager]);
+    // точка магазина на карте переезжает на клиента 1С (если у него своей точки ещё нет)
+    await t.query("UPDATE client_geo SET client_code = $2 WHERE client_code = $1 AND NOT EXISTS (SELECT 1 FROM client_geo WHERE client_code = $2)", [`NEW-${s.id}`, c.code]);
+    await t.query("DELETE FROM client_geo WHERE client_code = $1", [`NEW-${s.id}`]);
   });
   return { ok: true, clientCode: c.code, clientName: c.name };
 }

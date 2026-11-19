@@ -123,6 +123,7 @@ function AdminSettingsLive({ session, authLost, showToast }) {
         </div>
       </MgCard>
       <ShopPriceSetting session={session} authLost={authLost} showToast={showToast} current={r.data.shopPriceType} onSaved={r.reload} />
+      <PaymentQrSettings session={session} authLost={authLost} showToast={showToast} />
       <AdminDebtsSource session={session} authLost={authLost} showToast={showToast} />
     </>
   );

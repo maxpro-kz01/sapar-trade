@@ -8,6 +8,7 @@
 //  sync       — статус и журнал интеграции; users — управление пользователями; audit — журнал действий
 
 //  team / team.own — рейтинг ТП всех / своей команды; plans.edit — ввод плана продаж
+//  routes — маршрутные листы водителей: составить и передать водителю (владелец, директор, оператор, склад); водитель видит свой лист по fleet.send
 //  Задачи: tasks.create — ставить задачи любому сотруднику (владелец, директор, администратор); tasks.all — видеть все (те же роли).
 //  Остальные роли получают задачи, меняют статус и пишут комментарии, но сами задачи не создают.
 //  orders.create — создавать заказы (ТП/супервайзер — только своим клиентам); orders.all / orders.own — видеть заказы;
@@ -17,16 +18,16 @@
 //  cash — остатки касс/счетов и движение денег по статьям; cash.in — только «поступило от покупателей» (директор)
 export const ROLE_PERMS = {
   owner:      ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes"],
   // директор — те же права, что у владельца (решение 19.11.2026). Управлять владельцем и другими директорами не может (users.js: TOP)
   director:   ["sales", "gross", "margin", "stock", "debts", "sync", "users", "audit", "team", "plans.edit", "tasks.all", "tasks.create",
-               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit"],
+               "orders.create", "orders.all", "orders.manage", "settings", "fleet.view", "cash", "shops", "credit", "routes"],
   supervisor: ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   tp:         ["sales.own", "debts.own", "team.own", "orders.create", "orders.own"],
   accountant: ["sales", "debts", "sync", "orders.all", "cash"],
   financier:  ["sales", "debts", "cash"],
-  warehouse:  ["stock", "orders.all", "orders.manage"],
-  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.all", "tasks.create"],
+  warehouse:  ["stock", "orders.all", "orders.manage", "routes"],
+  admin:      ["stock", "users", "orders.all", "orders.manage", "shift", "settings", "shops", "tasks.all", "tasks.create", "routes"],
   driver:     ["fleet.send"],
 };
 
