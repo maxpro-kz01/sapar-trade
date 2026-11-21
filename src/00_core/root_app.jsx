@@ -63,7 +63,15 @@ function App() {
         .kz-root, .kz-root input, .kz-root textarea, .kz-root button { font-family: 'Manrope', sans-serif; }
         .font-display { font-family: 'Unbounded', sans-serif; }
         .font-mono-kz { font-family: 'JetBrains Mono', monospace; }
-        .kz-root ::-webkit-scrollbar { display: none; }
+        /* телефон/планшет (палец) — полосу прокрутки не показываем; компьютер (мышь) — видимая полоса справа, которую можно тянуть */
+        @media (pointer: coarse) { .kz-root ::-webkit-scrollbar { display: none; } }
+        @media (pointer: fine) {
+          @supports not selector(::-webkit-scrollbar) { .kz-root * { scrollbar-color: #A9A6C4 #ECEBF4; } }
+          .kz-root ::-webkit-scrollbar { width: 12px; height: 12px; }
+          .kz-root ::-webkit-scrollbar-track { background: #ECEBF4; border-radius: 8px; }
+          .kz-root ::-webkit-scrollbar-thumb { background: #A9A6C4; border-radius: 8px; border: 2px solid #ECEBF4; min-height: 40px; }
+          .kz-root ::-webkit-scrollbar-thumb:hover { background: #7F7BA6; }
+        }
       `}</style>
 
       <div className="relative h-full w-full kz-frame">
