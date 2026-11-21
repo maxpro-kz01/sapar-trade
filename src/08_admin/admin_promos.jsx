@@ -24,34 +24,58 @@ function GiftLine({ name, qty, unit, title }) {
   );
 }
 
-// Выбор товара из списка: строка поиска + найденные позиции (с остатком)
+// Выбор товара из списка: поле открывает список всех товаров по группам, сверху поиск (печатать не обязательно)
 function PromoProductPicker({ label, items, value, onChange }) {
+  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const picked = items.find((x) => x.code === value);
-  const found = text.trim().length < 2 ? [] : items.filter((x) => x.name.toLowerCase().includes(text.trim().toLowerCase())).slice(0, 30);
+  const q = text.trim().toLowerCase();
+  const LIMIT = 300;
+  const all = (q ? items.filter((x) => x.name.toLowerCase().includes(q)) : items.slice())
+    .sort((x, y) => String(x.grp || "").localeCompare(String(y.grp || ""), "ru") || x.name.localeCompare(y.name, "ru"));
+  const shown = all.slice(0, LIMIT);
+  const choose = (code) => { onChange(code); setOpen(false); setText(""); };
   return (
     <div className="mb-3">
       <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>{label}</label>
-      {picked && (
+      {picked && !open && (
         <div className="rounded-xl px-3 py-2 mt-1 flex items-center gap-2" style={{ background: "#EEF0FF", border: "1.5px solid var(--navy)" }}>
-          <div className="flex-1 min-w-0">
+          <button onClick={() => setOpen(true)} className="flex-1 min-w-0 text-left">
             <p style={{ fontSize: 13, fontWeight: 700 }}>{picked.name}</p>
-            <p style={{ fontSize: 11, color: "var(--muted)" }}>На складе: {Number(picked.stock)} {picked.unit || ""}</p>
-          </div>
-          <button onClick={() => { onChange(""); setText(""); }} className="p-1 rounded-full" style={{ background: "#fff" }}><Ico name="x" size={14} /></button>
+            <p style={{ fontSize: 11, color: "var(--muted)" }}>На складе: {Number(picked.stock)} {picked.unit || ""} · нажмите, чтобы заменить</p>
+          </button>
+          <button onClick={() => onChange("")} className="p-1 rounded-full" style={{ background: "#fff" }}><Ico name="x" size={14} /></button>
         </div>
       )}
-      {!picked && (
-        <>
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Начните вводить название товара" className="w-full px-3 py-2.5 rounded-xl mt-1" style={{ border: "1.5px solid var(--line)", fontSize: 14 }} />
-          {text.trim().length >= 2 && !found.length && <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>Ничего не найдено</p>}
-          {found.map((x) => (
-            <button key={x.code} onClick={() => onChange(x.code)} className="w-full text-left rounded-xl px-3 py-2 mt-1.5 press-98" style={{ background: "#fff", border: "1px solid var(--line)" }}>
-              <p style={{ fontSize: 13, fontWeight: 600 }}>{x.name}</p>
-              <p style={{ fontSize: 11, color: "var(--muted)" }}>{x.grp} · на складе {Number(x.stock)} {x.unit || ""}</p>
-            </button>
-          ))}
-        </>
+      {!picked && !open && (
+        <button onClick={() => setOpen(true)} className="w-full px-3 py-2.5 rounded-xl mt-1 flex items-center justify-between text-left" style={{ border: "1.5px solid var(--line)", fontSize: 14, background: "#fff", color: "var(--muted)" }}>
+          <span>Выберите товар из списка</span><span style={{ fontSize: 14 }}>▾</span>
+        </button>
+      )}
+      {open && (
+        <div className="rounded-xl mt-1 overflow-hidden" style={{ border: "1.5px solid var(--navy)", background: "#fff" }}>
+          <div className="flex items-center gap-2 p-2" style={{ borderBottom: "1px solid var(--line)" }}>
+            <input autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Поиск по названию (необязательно)" className="flex-1 px-3 py-2 rounded-lg" style={{ border: "1px solid var(--line)", fontSize: 14 }} />
+            <button onClick={() => { setOpen(false); setText(""); }} className="p-1.5 rounded-full" style={{ background: "#F4F4FA" }}><Ico name="x" size={14} /></button>
+          </div>
+          <div style={{ maxHeight: 280, overflowY: "auto" }}>
+            {!shown.length && <p style={{ fontSize: 12, color: "var(--muted)", padding: 12 }}>Ничего не найдено</p>}
+            {shown.map((x, i) => {
+              const head = !i || String(shown[i - 1].grp || "") !== String(x.grp || "");
+              const none = !(Number(x.stock) > 0);
+              return (
+                <div key={x.code}>
+                  {head && <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", padding: "8px 12px 4px", background: "#F7F7FB" }}>{x.grp || "Без группы"}</p>}
+                  <button onClick={() => choose(x.code)} className="w-full text-left px-3 py-2 press-98" style={{ borderTop: "1px solid var(--line)", opacity: none ? 0.55 : 1 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600 }}>{x.name}</p>
+                    <p style={{ fontSize: 11, color: none ? "#C0392B" : "var(--muted)" }}>{none ? "нет на складе" : "на складе " + Number(x.stock) + " " + (x.unit || "")}</p>
+                  </button>
+                </div>
+              );
+            })}
+            {all.length > LIMIT && <p style={{ fontSize: 11, color: "var(--muted)", padding: 10 }}>Показано первых {LIMIT} из {all.length}. Введите часть названия, чтобы сузить список.</p>}
+          </div>
+        </div>
       )}
     </div>
   );
